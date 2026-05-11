@@ -1,6 +1,6 @@
 /*
  * compat_stubs.c — out-of-tree stub implementations for Mach functions
- * that the MIG-generated *_server.c files reference but ravynOS's
+ * that MIG-generated *_server.c files reference but ravynOS's
  * compat/mach/ source tree doesn't actually define.
  *
  * Apple's authoritative Mach source has these in osfmk/vm/vm_user.c
@@ -15,16 +15,13 @@
  *
  * The stubs are declared (void) so the compile of this file doesn't
  * depend on the full Mach argument-type universe. At link time only
- * symbol names are matched — the MIG stubs' callers pass arguments
- * per the proper signature, but our (void)-bodied stubs ignore the
- * stack/register state and return immediately. On amd64 the caller
- * manages its own stack frame, so this is safe.
+ * symbol names are matched. The MIG stubs' callers pass arguments per
+ * the proper signature, but our (void)-bodied stubs ignore the
+ * stack/register state and return immediately — on amd64 the caller
+ * manages its own stack frame, so this is safe at runtime.
  *
- * Real implementations are out of Phase B scope. The smoke test only
- * needs kldload + kldstat -m mach. Discovered by cross-referencing
- * MIG extern declarations against actually-defined functions in our
- * build tree (only entries in *_server.c that are extern declared but
- * never have a matching definition land here).
+ * Real implementations are out of Phase B scope. Smoke test only needs
+ * kldload + kldstat -m mach.
  */
 
 #include <sys/cdefs.h>
@@ -36,23 +33,18 @@
 	kern_return_t name(void);					\
 	kern_return_t name(void) { return (KERN_NOT_SUPPORTED); }
 
-/* From host_priv_server.c / host_server.c */
-MACH_STUB(host_get_UNDServer)
-MACH_STUB(host_set_UNDServer)
-MACH_STUB(host_statistics64)
+/*
+ * Mach VM RPCs whose canonical implementations live in Apple's
+ * osfmk/vm/vm_user.c — not ported by ravynOS. Names cross-referenced
+ * against the actual function definitions in mach_vm.c, mach_host.c,
+ * mach_host_priv.c, mach_task.c. Only names with no matching
+ * definition land here.
+ */
+
+/* From host_priv_server.c */
 MACH_STUB(vm_wire)
 
-/* From mach_vm_server.c — 64-bit-address Mach VM RPCs */
-MACH_STUB(mach_make_memory_entry_64)
-MACH_STUB(mach_memory_object_memory_entry_64)
-MACH_STUB(mach_vm_region_info_64)
-
-/* From task_server.c */
-MACH_STUB(task_resume2)
-MACH_STUB(task_suspend2)
-
 /* From vm_map_server.c — 32-bit-address Mach VM RPCs */
-MACH_STUB(vm_allocate_cpm)
 MACH_STUB(vm_behavior_set)
 MACH_STUB(vm_copy)
 MACH_STUB(vm_inherit)
