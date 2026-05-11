@@ -65,6 +65,11 @@ SRCS+=	mach_debug.c mach_msg.c mach_port.c
 # compat/mach/kern
 SRCS+=	ipc_tt.c ipc_host.c task.c thread_pool.c
 
+# Out-of-tree compat stubs for Mach functions whose authoritative
+# implementations live in Apple's osfmk/vm/vm_user.c — not in ravynOS's
+# compat/mach/ port. See src/compat_stubs.c for rationale.
+SRCS+=	compat_stubs.c
+
 # Include paths:
 #   include/apple/  — Apple-ism headers (proc_info.h, kern_event.h, ...)
 #   include/       — top-level so '#include <sys/mach/...>' resolves to
