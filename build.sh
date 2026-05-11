@@ -256,6 +256,29 @@ CHROOT_BUILD
 fi
 
 #
+# 3a. extract src.txz to $WORK/freebsd-src. Used for two things in
+#     subsequent steps:
+#       - kernel sources for the mach.ko out-of-tree build (3b)
+#       - FreeBSD's release scripts (mkisoimages.sh) at step 11
+#     One extraction, two consumers.
+#
+echo "==> extracting src.txz for kernel sources + release scripts"
+mkdir -p "$WORK/freebsd-src"
+tar -xJf "$DIST/src.txz" -C "$WORK/freebsd-src"
+
+#
+# 3b. build mach.ko against the freshly-extracted kernel sources and
+#     install it into $WORK/rootfs/boot/kernel/mach.ko so it ships
+#     inside rootfs.uzip. Step 8 below also copies it onto the cd9660
+#     so the loader can preload it before init runs.
+#
+echo "==> building mach.ko"
+"$ROOT/make-mach-kmod.sh" \
+    --sysdir="$WORK/freebsd-src/usr/src/sys" \
+    --prefix="$WORK/rootfs"
+ls -lh "$WORK/rootfs/boot/kernel/mach.ko"
+
+#
 # 4. trim rootfs of things not needed at runtime
 #
 echo "==> slimming rootfs"
@@ -361,11 +384,13 @@ gzip -9c "$WORK/rootfs/boot/kernel/kernel" > "$WORK/cdroot/boot/kernel/kernel.gz
 ls -lh "$WORK/cdroot/boot/kernel/kernel.gz" \
        "$WORK/rootfs/boot/kernel/kernel"
 
-# Modules: only what we need at boot. Phase B will add mach.ko here.
+# Modules to preload from cd9660 (before unionfs pivot).
+# mach.ko is here so loader brings it in before init runs.
 BOOT_MODULES="geom_uzip.ko unionfs.ko \
               acpi.ko \
               virtio.ko virtio_pci.ko virtio_blk.ko virtio_scsi.ko \
-              ahci.ko mfi.ko"
+              ahci.ko mfi.ko \
+              mach.ko"
 for m in $BOOT_MODULES; do
     if [ -f "$WORK/rootfs/boot/kernel/$m" ]; then
         cp "$WORK/rootfs/boot/kernel/$m" "$WORK/cdroot/boot/kernel/"
@@ -381,13 +406,6 @@ echo "==> /boot on cd9660:"
 du -sh "$WORK/cdroot/boot" "$WORK/cdroot/boot/kernel" || true
 ls -la "$WORK/cdroot/boot/kernel/" || true
 ls -la "$WORK/cdroot/boot/firmware" || true
-
-#
-# 9. extract src.txz to expose FreeBSD's release scripts.
-#
-echo "==> extracting src.txz for FreeBSD release scripts"
-mkdir -p "$WORK/freebsd-src"
-tar -xJf "$DIST/src.txz" -C "$WORK/freebsd-src"
 
 #
 # 10. stage cd9660-direct UEFI fallback.
@@ -414,9 +432,35 @@ chmod +x "$MKISO"
 ls -lh "$OUT/livecd.iso"
 sha256 "$OUT/livecd.iso" 2>/dev/null || sha256sum "$OUT/livecd.iso"
 
+#
+# 12. package mach.ko as a standalone release tarball. Users on a stock
+#     FreeBSD install can fetch this, untar to /, kldload mach, without
+#     building anything.
+#
+echo "==> packaging mach.ko standalone tarball"
+MACHKO_PKG_DIR="$WORK/mach-kmod-pkg"
+MACHKO_BASENAME="mach.ko-FreeBSD-${FREEBSD_VERSION}-${ARCH}"
+mkdir -p "$MACHKO_PKG_DIR/boot/kernel"
+cp "$WORK/rootfs/boot/kernel/mach.ko" "$MACHKO_PKG_DIR/boot/kernel/mach.ko"
+cat > "$MACHKO_PKG_DIR/README" <<EOF
+mach.ko — out-of-tree FreeBSD Mach IPC kernel module.
+
+Built against: FreeBSD ${FREEBSD_VERSION} (${ARCH})
+Built on:      $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+Install:
+  tar -xJf ${MACHKO_BASENAME}.tar.gz -C /
+  echo 'mach_load="YES"' >> /boot/loader.conf
+  # reboot, or kldload mach
+EOF
+( cd "$MACHKO_PKG_DIR" && tar -czf "$OUT/${MACHKO_BASENAME}.tar.gz" boot README )
+ls -lh "$OUT/${MACHKO_BASENAME}.tar.gz"
+sha256 "$OUT/${MACHKO_BASENAME}.tar.gz" 2>/dev/null || sha256sum "$OUT/${MACHKO_BASENAME}.tar.gz"
+
 echo
 echo "==> cdroot size breakdown:"
 du -sh "$WORK/cdroot"/* 2>/dev/null | sort -h
 echo
 echo "==> ISO total: $(ls -lh "$OUT/livecd.iso" | awk '{print $5}')"
+echo "==> mach.ko tarball: $(ls -lh "$OUT/${MACHKO_BASENAME}.tar.gz" | awk '{print $5}')"
 echo "==> DONE"

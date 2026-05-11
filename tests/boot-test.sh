@@ -68,11 +68,24 @@ eval spawn qemu-system-x86_64 \
     -display none -serial stdio \
     -no-reboot
 
-# Stage 1: wait for the getty "login:" prompt. By the time this fires,
-# the entire pipeline has worked: loader -> kernel -> shebang exec of
-# /init.sh as PID 1 -> unionfs pivot -> exec /sbin/launchd -> launchd
-# loads org.freebsd.getty.console.plist -> getty spawns and prints the
-# prompt. Strongest single-marker proof the launchd-as-PID-1 path works.
+# Stage 1: wait for the Phase B mach.ko smoke marker emitted by
+# /etc/rc.local. By the time this fires, the boot pipeline has worked:
+# loader preloaded mach.ko -> kernel up -> /init.sh as PID 1 -> unionfs
+# pivot -> stock init in chroot -> rc multi-user sequence -> rc.local
+# ran kldstat -m mach. The marker proves mach.ko is loaded.
+expect {
+    timeout {
+        puts "\nFAIL: MACH-SMOKE-OK marker not seen within 8 minutes"
+        exit 1
+    }
+    "MACH-SMOKE-FAIL" {
+        puts "\nFAIL: mach.ko did NOT load on boot"
+        exit 1
+    }
+    "MACH-SMOKE-OK" { puts "\nOK: mach.ko is loaded" }
+}
+
+# Stage 2: wait for the getty "login:" prompt. Boot is complete.
 expect {
     timeout {
         puts "\nFAIL: 'login:' prompt not seen within 8 minutes"
@@ -81,11 +94,10 @@ expect {
     "login:" { puts "\nOK: boot reached the login prompt" }
 }
 
-# Stage 2: send "root" and confirm login(1) actually responds. Either
+# Stage 3: send "root" and confirm login(1) actually responds. Either
 # "Password:" (login asked, so login binary is alive — proves the post-
 # getty userland is intact) or a shell prompt (passwordless root login
-# succeeded — even better) is a pass. Silence is failure: launchd
-# spawned getty but the rest of userland is broken.
+# succeeded — even better) is a pass. Silence is failure.
 send "root\r"
 expect {
     timeout {

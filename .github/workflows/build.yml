@@ -61,13 +61,14 @@ jobs:
       - name: artifact summary
         run: |
           ls -lh out/
-          (cd out && sha256sum *.iso) | tee out/SHA256SUMS
+          (cd out && sha256sum *.iso *.tar.gz) | tee out/SHA256SUMS
 
       - uses: actions/upload-artifact@v4
         with:
           name: livecd-${{ matrix.freebsd }}-${{ matrix.arch }}-${{ matrix.compress }}
           path: |
             out/livecd.iso
+            out/mach.ko-FreeBSD-${{ matrix.freebsd }}-${{ matrix.arch }}.tar.gz
             out/SHA256SUMS
           retention-days: 14
           if-no-files-found: error
@@ -132,16 +133,21 @@ jobs:
           name: livecd-${{ matrix.freebsd }}-${{ matrix.arch }}-${{ matrix.compress }}
           path: out/
 
-      - name: prepare release assets (rename to dated public name)
+      - name: prepare release assets (rename to dated public names)
         id: prep
         run: |
           set -eu
           DATE=$(date -u +%Y%m%d)
-          DATED="FreeBSD-${{ matrix.freebsd }}-${{ matrix.arch }}-mach-${DATE}.iso"
-          cp out/livecd.iso "out/${DATED}"
-          ( cd out && sha256sum "${DATED}" > "${DATED}.sha256" )
-          ls -lh "out/${DATED}" "out/${DATED}.sha256"
-          echo "dated=${DATED}" >> "$GITHUB_OUTPUT"
+          DATED_ISO="FreeBSD-${{ matrix.freebsd }}-${{ matrix.arch }}-mach-${DATE}.iso"
+          DATED_KMOD="mach.ko-FreeBSD-${{ matrix.freebsd }}-${{ matrix.arch }}-${DATE}.tar.gz"
+          cp out/livecd.iso "out/${DATED_ISO}"
+          cp "out/mach.ko-FreeBSD-${{ matrix.freebsd }}-${{ matrix.arch }}.tar.gz" \
+             "out/${DATED_KMOD}"
+          ( cd out && sha256sum "${DATED_ISO}"  > "${DATED_ISO}.sha256" )
+          ( cd out && sha256sum "${DATED_KMOD}" > "${DATED_KMOD}.sha256" )
+          ls -lh "out/${DATED_ISO}" "out/${DATED_KMOD}"
+          echo "dated_iso=${DATED_ISO}"   >> "$GITHUB_OUTPUT"
+          echo "dated_kmod=${DATED_KMOD}" >> "$GITHUB_OUTPUT"
 
       # `gh release create` wedges silently on big ISO uploads (single PUT,
       # no chunking, no retry). softprops/action-gh-release uses Octokit's
@@ -174,5 +180,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           files: |
-            out/${{ steps.prep.outputs.dated }}
-            out/${{ steps.prep.outputs.dated }}.sha256
+            out/${{ steps.prep.outputs.dated_iso }}
+            out/${{ steps.prep.outputs.dated_iso }}.sha256
+            out/${{ steps.prep.outputs.dated_kmod }}
+            out/${{ steps.prep.outputs.dated_kmod }}.sha256
