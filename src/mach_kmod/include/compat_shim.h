@@ -75,24 +75,27 @@ int sys___iopolicysys(struct thread *td, struct __iopolicysys_args *uap);
  * osx_syscalls[] array initialization compiles.
  *
  * Each stub provides:
- *   - struct NAME_args { int dummy; }  (sizeof() works for sy_narg calc)
- *   - SYS_NAME           = NO_SYSCALL  (request dynamic syscall slot)
- *   - SYS_AUE_NAME       = AUE_NULL    (no audit event)
+ *   - struct NAME_args { int _stub; }  (sizeof() works for sy_narg calc)
+ *   - SYS_NAME           = -1          (FreeBSD NO_SYSCALL sentinel)
+ *   - SYS_AUE_NAME       = 0           (FreeBSD AUE_NULL sentinel)
+ *
+ * Literals are used instead of <sys/sysent.h> / <bsm/audit_kevents.h>
+ * because the compat shim is force-included before any other header in
+ * the .c file; pulling in those headers this early risks ordering
+ * problems with the kernel build's existing include chain. The
+ * literals match the canonical definitions byte-for-byte.
  *
  * The handler bodies (sys_NAME) are defined in the ravynOS source
  * files; we only declare the prototype here so the address-taking in
  * SYSCALL_INIT_HELPER resolves. Phase B does NOT actually register
  * these via syscall_helper_register — see the wrapper macro below.
  */
-#include <sys/syscall.h>		/* NO_SYSCALL */
-#include <bsm/audit_kevents.h>		/* AUE_NULL */
-
 #define	_MACH_KMOD_APPLE_SYSCALL_STUB(name)				\
 	struct name ## _args { int _stub; };				\
 	int sys_ ## name(struct thread *, struct name ## _args *);	\
 	enum {								\
-		SYS_ ## name = NO_SYSCALL,				\
-		SYS_AUE_ ## name = AUE_NULL				\
+		SYS_ ## name = -1,		/* NO_SYSCALL */	\
+		SYS_AUE_ ## name = 0		/* AUE_NULL */		\
 	}
 
 _MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_vm_allocate_trap);
