@@ -13,6 +13,15 @@
 #ifdef _KERNEL
 
 /*
+ * This shim is force-included via the Makefile's -include directive,
+ * which fires before any other include in the .c file. The fixed-width
+ * integer types we need below come from <sys/types.h>; pull it in here
+ * so the typedefs are visible when the shim's own declarations are
+ * parsed.
+ */
+#include <sys/types.h>
+
+/*
  * ravynOS adds p_machdata / td_machdata fields to struct proc / struct
  * thread to attach a Mach task and Mach thread to each FreeBSD proc/td.
  * Stock FreeBSD already provides exactly the right slot for this — the
