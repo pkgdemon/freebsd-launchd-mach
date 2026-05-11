@@ -55,7 +55,7 @@ struct __proc_info_args {
 	int			pid;
 	unsigned int		flavor;		/* matches uint32_t on amd64 */
 	unsigned long long	arg;		/* matches uint64_t on amd64 */
-	unsigned long long	buffer;		/* matches uint64_t on amd64 */
+	void			*buffer;	/* passed as void *addr to proc_info() */
 	int			buffersize;	/* matches int32_t on amd64 */
 };
 
