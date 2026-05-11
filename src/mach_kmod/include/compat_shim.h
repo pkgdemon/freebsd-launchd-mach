@@ -182,6 +182,56 @@ _MACH_KMOD_APPLE_SYSCALL_STUB(mk_timer_cancel);
  * test and iterate.
  */
 
+/*
+ * Three VM functions ravynOS's mach_vm.c calls are static inline in
+ * stock FreeBSD's vm/vm_map.c — not exported to modules. Provide
+ * out-of-tree replacements so the compile + link succeeds.
+ *
+ * - vm_map_entry_pred: re-implemented faithfully from the static
+ *   inline in vm_map.c (uses only the public struct vm_map_entry
+ *   fields, which are in vm/vm_map.h).
+ *
+ * - vm_map_clip_start / vm_map_clip_end: stubbed as no-ops returning
+ *   KERN_SUCCESS. The only call site in mach_vm.c is inside an
+ *   if (src_destroy) path of vm_map_copy_overwrite() which is not
+ *   exercised by Phase B's smoke test ("kldstat -m mach"). When the
+ *   destroying-copy path is needed for real, these stubs need to be
+ *   replaced with proper implementations — likely via a thin C
+ *   reimplementation against vm_map_lock + vm_map_entry_link.
+ */
+#include <vm/vm.h>
+#include <vm/vm_map.h>
+
+static __inline vm_map_entry_t
+vm_map_entry_pred(vm_map_entry_t entry)
+{
+	vm_map_entry_t prior;
+
+	prior = entry->left;
+	if (prior->right->start < entry->start) {
+		do
+			prior = prior->right;
+		while (prior->right != entry);
+	}
+	return (prior);
+}
+
+static __inline int
+vm_map_clip_start(vm_map_t map __unused, vm_map_entry_t entry __unused,
+    vm_offset_t startaddr __unused)
+{
+
+	return (0);	/* KERN_SUCCESS — stub, see comment above */
+}
+
+static __inline int
+vm_map_clip_end(vm_map_t map __unused, vm_map_entry_t entry __unused,
+    vm_offset_t endaddr __unused)
+{
+
+	return (0);	/* KERN_SUCCESS — stub, see comment above */
+}
+
 #endif /* _KERNEL */
 
 #endif /* _MACH_KMOD_COMPAT_SHIM_H_ */
