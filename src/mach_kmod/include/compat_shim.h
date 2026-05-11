@@ -50,18 +50,15 @@
  * registration is a separate Phase-B follow-up (the handlers exist
  * but are not yet wired into a sysent table).
  */
-struct __proc_info_args {
-	int			callnum;
-	int			pid;
-	unsigned int		flavor;		/* matches uint32_t on amd64 */
-	unsigned long long	arg;		/* matches uint64_t on amd64 */
-	void			*buffer;	/* passed as void *addr to proc_info() */
-	int			buffersize;	/* matches int32_t on amd64 */
-};
-
-struct __iopolicysys_args {
-	int		dummy;	/* iopolicysys handler returns ENOSYS unconditionally */
-};
+/*
+ * Real Mach syscall arg struct definitions are extracted from ravynOS's
+ * generated sysproto.h and live at include/sys/mach/_mach_sysproto.h.
+ * They use Apple Mach types (mach_msg_header_t, mach_port_name_t, etc.)
+ * which need <sys/mach/mach_types.h> + friends visible first. Pull them
+ * in here so the structs parse correctly; subsequent .c files including
+ * the same headers see the idempotent guards.
+ */
+#include <sys/mach/_mach_sysproto.h>
 
 struct thread;
 int sys___proc_info(struct thread *td, struct __proc_info_args *uap);
@@ -113,8 +110,14 @@ enum {
  * SYSCALL_INIT_HELPER resolves. Phase B does NOT actually register
  * these via syscall_helper_register — see the wrapper macro below.
  */
+/*
+ * For each Apple-shape syscall, declare the prototype (the struct is
+ * already defined by _mach_sysproto.h above) and the SYS_/SYS_AUE_
+ * constants that mach_module.c references via SYSCALL_INIT_HELPER.
+ * Constants are NO_SYSCALL (-1) so syscall_helper_register dynamically
+ * allocates slots, and AUE_NULL (0) so no audit event is emitted.
+ */
 #define	_MACH_KMOD_APPLE_SYSCALL_STUB(name)				\
-	struct name ## _args { int _stub; };				\
 	int sys_ ## name(struct thread *, struct name ## _args *);	\
 	enum {								\
 		SYS_ ## name = -1,		/* NO_SYSCALL */	\
