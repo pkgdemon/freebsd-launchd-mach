@@ -272,4 +272,17 @@ struct mk_timer_cancel_args {
 	char result_time_l_[PADL_(mach_absolute_time_t *)]; mach_absolute_time_t * result_time; char result_time_r_[PADR_(mach_absolute_time_t *)];
 };
 
+/*
+ * Unset our local PADL_/PADR_ now that all the extracted Mach struct
+ * defs have parsed. mach_traps.c / mach_misc.c / mach_module.c will
+ * subsequently #include <sys/sysproto.h>, whose canonical PADL_/PADR_
+ * definitions need a clean slate (else -Werror,-Wmacro-redefined fires
+ * on the duplicate). The FreeBSD-native struct defs in sysproto.h will
+ * then use the canonical padding semantics; ours used 0/0, which is
+ * fine because Phase B syscalls register with NO_SYSCALL and are
+ * never invoked.
+ */
+#undef PADL_
+#undef PADR_
+
 #endif /* _MACH_KMOD__MACH_SYSPROTO_H_ */
