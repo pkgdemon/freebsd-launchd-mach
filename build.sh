@@ -6,9 +6,10 @@
 #   via init_chroot kenv (no preload, no mfsroot, no reboot -r).
 # Runs on FreeBSD (host or vmactions VM). Produces out/livecd.iso.
 #
-# Phase A target: vanilla FreeBSD ISO that boots stock /sbin/init as PID 1.
-# No Mach kernel module yet, no launchd, no configd. Phase B will add
-# mach.ko build + install steps.
+# Phase A target: FreeBSD live ISO with stock /sbin/init as PID 1 AND the
+# gershwin/GNUstep system-domain libraries (libdispatch, libobjc2,
+# libs-base, libs-corebase) pre-installed under /System/Library/. No Mach
+# kernel module yet, no launchd, no configd. Phase B adds mach.ko.
 
 set -eu
 
@@ -17,34 +18,55 @@ set -eu
 : "${LABEL:=LIVECD}"
 ARCH=${ARCH:-amd64}
 
-# Note: no LIVE_HEADROOM in this variant. The lower UFS is sized exactly
-# to content; writable headroom comes from the tmpfs upper at boot, which
-# is page-allocated on demand and bounded by host RAM + swap rather than
-# by a build-time constant.
-
 ROOT=$(cd "$(dirname "$0")" && pwd)
 WORK=$ROOT/work
 OUT=$ROOT/out
 DIST=$ROOT/distfiles
+REPOS=$ROOT/repos
 
 MIRROR="https://download.freebsd.org/ftp/releases/${ARCH}/${FREEBSD_VERSION}-RELEASE"
 
-mkdir -p "$WORK" "$OUT" "$DIST"
+mkdir -p "$WORK" "$OUT" "$DIST" "$REPOS"
 
-# Clean any prior partial build (but keep distfiles cached)
+# Clean any prior partial build (but keep distfiles + repos cached)
 rm -rf "$WORK"/* "$OUT"/*
 
 echo "==> build: FreeBSD $FREEBSD_VERSION ($ARCH), compress=$COMPRESS"
+
+#
+# 0. host-side: clone or update the gershwin system-domain upstreams into
+#    repos/. Order is significant: tools-make writes the GNUstep.conf that
+#    libobjc2 reads, libobjc2 needs BlocksRuntime from libdispatch,
+#    libs-base/libs-corebase install through gnustep-make. Tracking
+#    upstream HEAD; no pinning. Chroot stays git-free — these clones live
+#    on the host and get rsynced in below.
+#
+echo "==> cloning/updating gershwin system-domain upstreams"
+UPSTREAMS="
+https://github.com/apple/swift-corelibs-libdispatch.git
+https://github.com/gnustep/tools-make.git
+https://github.com/gnustep/libobjc2.git
+https://github.com/Tessil/robin-map.git
+https://github.com/gnustep/libs-base.git
+https://github.com/gnustep/libs-corebase.git
+"
+for repo in $UPSTREAMS; do
+    name=$(basename "$repo" .git)
+    if [ -d "$REPOS/$name/.git" ]; then
+        echo "    updating $name"
+        ( cd "$REPOS/$name" && git fetch --all --tags && git pull --ff-only )
+    else
+        echo "    cloning $name"
+        git clone "$repo" "$REPOS/$name"
+    fi
+done
 
 #
 # 1. fetch base.txz + kernel.txz + src.txz
 #
 # src.txz gives us /usr/src/release/amd64/mkisoimages.sh — the FreeBSD
 # release engineering script that builds the hybrid (BIOS + UEFI El
-# Torito + GPT-overlaid for USB-stick dd) cd9660. Replaces the
-# hand-rolled makefs invocation we used to do; the script's hybrid-GPT
-# step at the end of mkisoimages.sh is what makes the same .iso file
-# bootable from both optical media and a dd'd USB stick.
+# Torito + GPT-overlaid for USB-stick dd) cd9660.
 #
 for f in base.txz kernel.txz src.txz; do
     if [ ! -f "$DIST/$f" ]; then
@@ -61,61 +83,172 @@ mkdir -p "$WORK/rootfs"
 tar -xJf "$DIST/base.txz"   -C "$WORK/rootfs"
 tar -xJf "$DIST/kernel.txz" -C "$WORK/rootfs"
 
-# base.txz ships /etc/login.conf but not the compiled /etc/login.conf.db.
-# Without the .db, login_getclass() can't find any class and logs a noisy
-# warning at boot ("login_getclass: unknown class 'daemon'"). The FreeBSD
-# installer rebuilds it via cap_mkdb during install; we have to do the
-# same since we skip bsdinstall.
+# Rebuild login + passwd .db files (bsdinstall would normally do this).
 cap_mkdb "$WORK/rootfs/etc/login.conf"
-
-# Same idea for the password databases. base.txz may or may not ship the
-# *.db files depending on version; rebuild them to be safe so getpwnam()
-# and friends work without warnings.
 pwd_mkdb -p -d "$WORK/rootfs/etc" "$WORK/rootfs/etc/master.passwd"
 
 #
-# 3. chroot: install runtime pkgs (pkglist.txt) only.
-#    Phase A has no buildpkgs (empty buildpkgs.txt), no system-domain
-#    build, no launchd/configd build, no kmodloader install. Just the
-#    runtime packages needed to boot a usable FreeBSD live ISO.
+# 3. chroot: runtime pkgs (pkglist.txt) + build pkgs (buildpkgs.txt) +
+#    system-domain build (libdispatch + GNUstep stack) + buildpkgs purge.
+#    Single chroot session for all of it; build pkgs go in and out before
+#    the slim pass so they don't ship in the ISO.
 #
-RUNTIME_PKGS=$(grep -v '^[[:space:]]*#' "$ROOT/pkglist.txt" 2>/dev/null | grep -v '^[[:space:]]*$' || true)
+RUNTIME_PKGS=$(grep -v '^[[:space:]]*#' "$ROOT/pkglist.txt"   2>/dev/null | grep -v '^[[:space:]]*$' || true)
+BUILD_PKGS=$(  grep -v '^[[:space:]]*#' "$ROOT/buildpkgs.txt" 2>/dev/null | grep -v '^[[:space:]]*$' || true)
 
-if [ -n "$RUNTIME_PKGS" ]; then
+if [ -n "$RUNTIME_PKGS" ] || [ -n "$BUILD_PKGS" ]; then
     cp /etc/resolv.conf "$WORK/rootfs/etc/resolv.conf"
     mount -t devfs devfs "$WORK/rootfs/dev"
     cleanup_chroot() {
         umount -f "$WORK/rootfs/dev" 2>/dev/null || true
         rm -f "$WORK/rootfs/etc/resolv.conf"
+        rm -rf "$WORK/rootfs/tmp/repos"
     }
     trap cleanup_chroot EXIT INT TERM
 
     chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes IGNORE_OSVERSION=yes pkg bootstrap -f
 
-    echo "==> installing runtime packages:"
-    echo "$RUNTIME_PKGS" | sed 's/^/    /'
-    # shellcheck disable=SC2086
-    # LICENSES_ACCEPTED=NVIDIA: nvidia-drm-latest-kmod (if it appears in
-    # pkglist.txt later) is a restricted-distribution blob and pkg refuses
-    # to install it without explicit license acceptance.
-    chroot "$WORK/rootfs" env \
-        ASSUME_ALWAYS_YES=yes \
-        IGNORE_OSVERSION=yes \
-        LICENSES_ACCEPTED=NVIDIA \
-        pkg install -y $RUNTIME_PKGS
+    if [ -n "$RUNTIME_PKGS" ]; then
+        echo "==> installing runtime packages:"
+        echo "$RUNTIME_PKGS" | sed 's/^/    /'
+        # shellcheck disable=SC2086
+        chroot "$WORK/rootfs" env \
+            ASSUME_ALWAYS_YES=yes \
+            IGNORE_OSVERSION=yes \
+            LICENSES_ACCEPTED=NVIDIA \
+            pkg install -y $RUNTIME_PKGS
 
-    # ---- dhcpcd: silence DHCPv6 retry spam ----
-    # The dhcpcd port ships /usr/local/etc/dhcpcd.conf as @sample; pkg
-    # copies it to dhcpcd.conf at install. Append nodhcp6 so dhcpcd
-    # doesn't attempt DHCPv6 on networks where the router advertises
-    # the M-flag but the DHCPv6 server returns "No Addresses Available".
-    if [ -f "$WORK/rootfs/usr/local/etc/dhcpcd.conf" ]; then
-        cat >> "$WORK/rootfs/usr/local/etc/dhcpcd.conf" <<'EOF'
+        # ---- dhcpcd: silence DHCPv6 retry spam ----
+        if [ -f "$WORK/rootfs/usr/local/etc/dhcpcd.conf" ]; then
+            cat >> "$WORK/rootfs/usr/local/etc/dhcpcd.conf" <<'EOF'
 
 # Live ISO overrides (see build.sh comment).
 nodhcp6
 quiet
 EOF
+        fi
+    fi
+
+    if [ -n "$BUILD_PKGS" ]; then
+        echo "==> installing build packages:"
+        echo "$BUILD_PKGS" | sed 's/^/    /'
+        # shellcheck disable=SC2086
+        chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes IGNORE_OSVERSION=yes \
+            pkg install -y $BUILD_PKGS
+
+        # Host-cloned upstreams into chroot; chroot stays git-free.
+        echo "==> rsyncing repos/ -> chroot:/tmp/repos/"
+        mkdir -p "$WORK/rootfs/tmp/repos"
+        rsync -a --delete "$REPOS/" "$WORK/rootfs/tmp/repos/"
+
+        # libobjc2's CMakeLists FetchContent_Declare(robinmap) calls git
+        # at configure-time — would fail in our git-free chroot. Rewrite
+        # the Declare to point SOURCE_DIR at the sibling robin-map clone
+        # we just rsynced.
+        echo "==> patching libobjc2 FetchContent(robinmap) -> SOURCE_DIR"
+        sed -i '' \
+            -e 's|GIT_REPOSITORY https://github.com/Tessil/robin-map/|SOURCE_DIR /tmp/repos/robin-map)|' \
+            -e '/GIT_TAG[[:space:]]*v1\.4\.0)/d' \
+            "$WORK/rootfs/tmp/repos/libobjc2/CMakeLists.txt"
+
+        echo "==> building gershwin system-domain libraries in chroot"
+        chroot "$WORK/rootfs" /bin/sh -ex <<'CHROOT_BUILD'
+MAKE_CMD=gmake
+CPUS=$(sysctl -n hw.ncpu)
+REPOS_DIR=/tmp/repos
+
+# libdispatch
+mkdir -p "$REPOS_DIR/swift-corelibs-libdispatch/Build"
+cd "$REPOS_DIR/swift-corelibs-libdispatch/Build"
+cmake .. \
+  -DCMAKE_INSTALL_PREFIX=/System/Library \
+  -DCMAKE_INSTALL_LIBDIR=Libraries \
+  -DINSTALL_DISPATCH_HEADERS_DIR=/System/Library/Headers/dispatch \
+  -DINSTALL_BLOCK_HEADERS_DIR=/System/Library/Headers \
+  -DINSTALL_OS_HEADERS_DIR=/System/Library/Headers/os \
+  -DINSTALL_PRIVATE_HEADERS=ON \
+  -DCMAKE_INSTALL_MANDIR=Documentation/man \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++
+"$MAKE_CMD" -j"$CPUS"
+"$MAKE_CMD" install
+
+# tools-make
+cd "$REPOS_DIR/tools-make"
+$MAKE_CMD distclean 2>/dev/null || true
+./configure \
+  --with-config-file=/System/Library/Preferences/GNUstep.conf \
+  --with-layout=gershwin \
+  --with-library-combo=ng-gnu-gnu \
+  --with-objc-lib-flag=" " \
+  LDFLAGS="-L/System/Library/Libraries" \
+  CPPFLAGS="-I/System/Library/Headers" \
+  libobjc_LIBS=" "
+$MAKE_CMD
+$MAKE_CMD install
+
+# Source the GNUstep environment now that tools-make has installed it.
+. /System/Library/Makefiles/GNUstep.sh
+
+# libobjc2
+rm -rf "$REPOS_DIR/libobjc2/Build"
+mkdir -p "$REPOS_DIR/libobjc2/Build"
+cd "$REPOS_DIR/libobjc2/Build"
+cmake .. \
+  -DGNUSTEP_INSTALL_TYPE=SYSTEM \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++ \
+  -DEMBEDDED_BLOCKS_RUNTIME=OFF \
+  -DBlocksRuntime_INCLUDE_DIR=/System/Library/Headers \
+  -DBlocksRuntime_LIBRARIES=/System/Library/Libraries/libBlocksRuntime.so
+"$MAKE_CMD" -j"$CPUS"
+"$MAKE_CMD" install
+
+# libs-base (Foundation)
+export GNUSTEP_INSTALLATION_DOMAIN="SYSTEM"
+cd "$REPOS_DIR/libs-base"
+# --disable-tls: launchd doesn't speak TLS, and pulling in libgnutls/openssl
+# would bloat the ISO for NSStream/NSURLConnection functionality we don't use.
+./configure \
+  --with-dispatch-include=/System/Library/Headers \
+  --with-dispatch-library=/System/Library/Libraries \
+  --disable-tls
+$MAKE_CMD -j"$CPUS"
+$MAKE_CMD install
+$MAKE_CMD clean
+
+# libs-corebase (CoreFoundation)
+cd "$REPOS_DIR/libs-corebase"
+./configure \
+  CPPFLAGS="-I/System/Library/Headers" \
+  LDFLAGS="-L/System/Library/Libraries"
+$MAKE_CMD -j"$CPUS"
+$MAKE_CMD install
+$MAKE_CMD clean
+CHROOT_BUILD
+
+        rm -rf "$WORK/rootfs/tmp/repos"
+
+        # ---- ldconfig hint for /System/Library/Libraries ----
+        # FreeBSD's /etc/rc.d/ldconfig at boot reads $ldconfig_local_dirs
+        # (default /usr/local/libdata/ldconfig) and adds each listed
+        # directory to the runtime linker hints. The `ldconfig -m` here
+        # primes the hints DB at build time so the ISO boots with
+        # /System/Library/Libraries/* immediately discoverable.
+        echo "==> writing ldconfig hint for /System/Library/Libraries"
+        mkdir -p "$WORK/rootfs/usr/local/libdata/ldconfig"
+        echo "/System/Library/Libraries" \
+            > "$WORK/rootfs/usr/local/libdata/ldconfig/freebsd-launchd-mach"
+        chroot "$WORK/rootfs" ldconfig -m /usr/local/lib /System/Library/Libraries
+
+        echo "==> purging build packages"
+        # shellcheck disable=SC2086
+        chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
+            pkg delete -y $BUILD_PKGS
+        chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
+            pkg autoremove -y || true
     fi
 
     cleanup_chroot
@@ -165,8 +298,7 @@ EOF
 
 #
 # 7. makefs UFS without an explicit -s. The writable upper is tmpfs at
-#    boot, so the lower UFS doesn't need user-visible headroom -- only
-#    enough room for UFS internal overhead.
+#    boot, so the lower UFS doesn't need user-visible headroom.
 #
 CONTENT_BYTES=$(du -sk "$WORK/rootfs" | awk '{print $1*1024}')
 echo "==> rootfs content = $CONTENT_BYTES bytes ($((CONTENT_BYTES / 1024 / 1024)) MiB)"
@@ -186,16 +318,14 @@ echo "==> mkuzip $MKUZIP_FLAGS"
 mkuzip $MKUZIP_FLAGS -j "$(sysctl -n hw.ncpu)" \
     -o "$WORK/cdroot/rootfs.uzip" "$WORK/rootfs.ufs"
 
-# Stage the init environment on the cd9660 root.
 echo "==> staging init environment on cd9660"
 mkdir -p "$WORK/cdroot/sbin" "$WORK/cdroot/rescue" "$WORK/cdroot/sysroot" \
          "$WORK/cdroot/upper" "$WORK/cdroot/dev" "$WORK/cdroot/etc"
 
-# /rescue: statically-linked busybox-equivalent. Use a tar pipe to
-# preserve hardlinks (FreeBSD's `cp -a` does NOT preserve them).
+# /rescue: use a tar pipe to preserve hardlinks (cp -a does not).
 ( cd "$WORK/rootfs" && tar cf - rescue ) | ( cd "$WORK/cdroot" && tar xf - )
 
-# Ship /etc/login.conf (+ compiled .db) on the cd9660 root.
+# Ship /etc/login.conf (+ compiled .db) and password files on cd9660.
 for f in passwd master.passwd group pwd.db spwd.db; do
     if [ -f "$WORK/rootfs/etc/$f" ]; then
         cp "$WORK/rootfs/etc/$f" "$WORK/cdroot/etc/$f"
@@ -213,12 +343,11 @@ chmod +x "$WORK/cdroot/init.sh"
 ls -lh "$WORK/cdroot/rootfs.uzip"
 
 #
-# 8. stage /boot on the cd9660 carrier — but ONLY the loader-needed bits.
+# 8. stage /boot on the cd9660 carrier — only the loader-needed bits.
 #
 echo "==> staging minimal /boot on cd9660"
 mkdir -p "$WORK/cdroot/boot/kernel"
 
-# Bootloader pieces (whichever exist; vary by FreeBSD release/arch)
 for f in cdboot loader loader.efi loader_lua loader_lua.efi \
          loader_simp loader_simp.efi pmbr isoboot boot1.efi \
          gptboot defaults device.hints lua fonts; do
@@ -227,7 +356,7 @@ for f in cdboot loader loader.efi loader_lua loader_lua.efi \
     fi
 done
 
-# Kernel binary, gzipped.
+# Kernel binary, gzipped (loader's gzipfs layer decompresses on read).
 gzip -9c "$WORK/rootfs/boot/kernel/kernel" > "$WORK/cdroot/boot/kernel/kernel.gz"
 ls -lh "$WORK/cdroot/boot/kernel/kernel.gz" \
        "$WORK/rootfs/boot/kernel/kernel"
@@ -245,7 +374,7 @@ done
 
 cp "$ROOT/boot/loader.conf" "$WORK/cdroot/boot/loader.conf"
 
-# /boot/firmware symlink — see freebsd-launchd build.sh for rationale.
+# /boot/firmware symlink — see comment in freebsd-launchd build.sh.
 ln -sf /sysroot/boot/firmware "$WORK/cdroot/boot/firmware"
 
 echo "==> /boot on cd9660:"

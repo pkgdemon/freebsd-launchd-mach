@@ -1,15 +1,15 @@
 # freebsd-launchd-mach
 
 FreeBSD modernization project. The plan: bring Apple's better lower-level
-system services (Mach IPC, launchd, configd, notifyd, asl, libdispatch,
-libxpc) to FreeBSD as an out-of-tree kernel module + userland stack,
-while keeping GNUstep for the framework layer and FreeBSD ELF for the
-binary format. macOS compatibility is a bonus; the goal is a more
-modern FreeBSD.
+system services (Mach IPC, launchd, configd, notifyd, asl, libxpc) to
+FreeBSD as an out-of-tree kernel module + userland stack, while keeping
+GNUstep for the framework layer and FreeBSD ELF for the binary format.
+macOS compatibility is a bonus; the goal is a more modern FreeBSD.
 
 - **Plan:** <https://pkgdemon.github.io/freebsd-launchd-mach-plan.html>
 - **License:** [BSD-2-Clause](LICENSE) (with per-component Apache 2.0 /
-  OSF / CMU headers preserved on imported files &mdash; see [NOTICE](NOTICE))
+  LGPL / MIT / OSF / CMU headers preserved on imported files &mdash;
+  see [NOTICE](NOTICE))
 - **Companion:** the [`freebsd-launchd`](https://github.com/pkgdemon/freebsd-launchd)
   repo, the AF_UNIX-only track. This repo is the pure-port track.
 
@@ -17,10 +17,12 @@ modern FreeBSD.
 
 **Phase A** &mdash; pipeline scaffold lifted from
 [`freebsd-launchd`](https://github.com/pkgdemon/freebsd-launchd). At this
-stage the build produces a vanilla FreeBSD live ISO that boots with
-stock FreeBSD `init` as PID 1. No Mach kernel module yet, no launchd,
-no configd. Phase A's only purpose is proving the new repo's build
-pipeline works in CI before any Mach work begins.
+stage the build produces a FreeBSD live ISO that boots stock FreeBSD
+`init` as PID 1, with the gershwin/GNUstep system-domain libraries
+(libdispatch, libobjc2, libs-base, libs-corebase) pre-installed under
+`/System/Library/`. No Mach kernel module yet, no launchd, no configd.
+Phase A's purpose is proving the new repo's build pipeline works in CI
+before any Mach work begins.
 
 **Phase B** (next, ~3 weeks) &mdash; port ravynOS's `sys/compat/mach/` as
 an out-of-tree `mach.ko`. Build it in CI, install to `/boot/kernel/mach.ko`
@@ -28,9 +30,9 @@ on the live ISO, set `loader.conf: mach_load="YES"` so loader preloads
 it before `init` runs. Userland smoke test does a `mach_port_allocate` +
 `mach_msg(SEND|RCV)` round-trip via the syscalls `mach.ko` registers.
 
-After Phase B: **hard stop**. Discuss libxpc choice, libdispatch choice,
-plist format, and whether to proceed to Phase C+ (userland Mach stack,
-Apple's launchd, configd, IPConfiguration). See the plan for details.
+After Phase B: **hard stop**. Discuss libxpc choice, libdispatch
+question, plist format, and whether to proceed to Phase C+ (Apple's
+launchd, configd, IPConfiguration). See the plan for details.
 
 ## Build
 

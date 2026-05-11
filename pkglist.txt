@@ -1,14 +1,27 @@
 # One pkg per line; lines starting with # are ignored.
 # Runtime packages — installed in the chroot and shipped in the ISO.
-# Distinct from buildpkgs.txt, which is purged before slim.
-#
-# Phase A target: vanilla FreeBSD ISO with the standard set of firmware
-# blobs and a working network stack. No GNUstep, no launchd-specific
-# packages. Phase B+ will add as needed.
+
+# ---- gershwin/GNUstep runtime deps ----
+
+# libs-base configure: GSXML / NSXMLNode / NSPropertyListSerialization
+# XML branch. libgnustep-base.so links against libxml2.so at runtime.
+libxml2
+
+# libs-base configure: NSLocale / NSString unicode handling.
+# libgnustep-base.so links against libicui18n.so + libicuuc.so at runtime.
+icu
+
+# Runtime dep surfaced at boot: ld-elf.so.1 fails to load
+# libgnustep-base.so because of "Shared object libffi.so.8 not found".
+# libffi gets pulled in as a transitive of cmake/ninja at build time but
+# removed by `pkg autoremove` after the buildpkgs purge. Pin it
+# explicitly here so it stays on the ISO.
+libffi
+
+# ---- firmware blobs ----
 
 # GPU firmware blobs metaport — pulls all flavored gpu-firmware-*-kmod
-# subpackages. Useful to have available even if Phase A doesn't yet have
-# kmodloader auto-loading them; users can kldload by hand.
+# subpackages.
 gpu-firmware-kmod
 
 # WiFi firmware blobs. Drivers themselves are in base.txz; firmware kmods
@@ -17,17 +30,15 @@ wifi-firmware-iwlwifi-kmod
 wifi-firmware-rtw88-kmod
 wifi-firmware-rtw89-kmod
 
-# Hypervisor guest additions. Useful for live-ISO testing in VBox/VMware.
+# ---- hypervisor guest additions ----
+
 virtualbox-ose-additions-nox11
 open-vm-tools-nox11
 
-# Network auto-config: dhcpcd in master mode replaces dhclient + rtsold
-# for IPv4 DHCP, IPv6 DHCPv6, RA/SLAAC processing, and link-state
-# handling. In Phase A this is invoked the normal FreeBSD way (rc.conf
-# ifconfig_DEFAULT="DHCP" + ipv6_activate_all_interfaces). Phase D will
-# move it under launchd.
+# ---- network ----
+
+# Network auto-config: dhcpcd in master mode.
 dhcpcd
 
-# Ports wpa_supplicant supersedes the base version: faster WPA3-SAE/OWE
-# uptake, current EAP method support, more aggressive CVE backports.
+# Ports wpa_supplicant supersedes the base version.
 wpa_supplicant
