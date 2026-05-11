@@ -37,17 +37,4 @@ vm_wire(host_priv_t host_priv, vm_map_t task, vm_address_t address,
 	return (KERN_NOT_SUPPORTED);
 }
 
-/*
- * Apple Mach RPC: mach_vm_wire — 64-bit-address variant of vm_wire.
- * Referenced by: host_priv_server.c MIG stub.
- */
-kern_return_t
-mach_vm_wire(host_priv_t host_priv, vm_map_t task,
-    mach_vm_address_t address, mach_vm_size_t size,
-    vm_prot_t desired_access)
-{
-
-	(void)host_priv; (void)task; (void)address;
-	(void)size; (void)desired_access;
-	return (KERN_NOT_SUPPORTED);
-}
+/* mach_vm_wire is already defined in src/mach_vm.c — no stub needed. */
