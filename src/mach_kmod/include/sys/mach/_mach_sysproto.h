@@ -20,10 +20,17 @@
 #include <sys/mach/mach_types.h>
 #include <sys/mach/message.h>
 
-#undef PADL_
-#undef PADR_
+/*
+ * Only define our stub PADL_/PADR_ if FreeBSD's <sys/sysproto.h>
+ * hasn't supplied real ones yet. mach_traps.c and friends include
+ * <sys/sysproto.h> before <sys/mach/...>, so by the time we reach
+ * here the canonical macros are already in place and we leave them
+ * alone (-Wmacro-redefined would fire on a duplicate define).
+ */
+#ifndef	PADL_
 #define	PADL_(t)	0
 #define	PADR_(t)	0
+#endif
 
 
 /* From ravynOS sys/sys/sysproto.h lines 701-712 (__proc_info, __iopolicysys) */
