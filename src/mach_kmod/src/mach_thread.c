@@ -284,9 +284,15 @@ thread_sysinit(void *arg __unused)
 									  NULL, NULL, uma_thread_init,
 									  uma_thread_fini, 1, 0);
 
+	#if 0 /*PhaseB-bisect*/
 	EVENTHANDLER_REGISTER(thread_ctor, mach_thread_ctor, NULL, EVENTHANDLER_PRI_ANY);
+#endif
+	#if 0 /*PhaseB-bisect*/
 	EVENTHANDLER_REGISTER(thread_init, mach_thread_init, NULL, EVENTHANDLER_PRI_ANY);
+#endif
+	#if 0 /*PhaseB-bisect*/
 	EVENTHANDLER_REGISTER(thread_fini, mach_thread_fini, NULL, EVENTHANDLER_PRI_ANY);
+#endif
 }
 
 /* before SI_SUB_INTRINSIC and after SI_SUB_EVENTHANDLER */

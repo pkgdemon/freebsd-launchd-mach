@@ -801,8 +801,12 @@ static void
 ipc_entry_sysinit(void *arg __unused)
 {
 
+	#if 0 /*PhaseB-bisect*/
 	EVENTHANDLER_REGISTER(process_exit, ipc_entry_list_close, NULL, EVENTHANDLER_PRI_ANY);
+#endif
+	#if 0 /*PhaseB-bisect*/
 	EVENTHANDLER_REGISTER(process_exec, ipc_entry_list_close, NULL, EVENTHANDLER_PRI_ANY);
+#endif
 }
 
 SYSINIT(ipc_entry, SI_SUB_KLD, SI_ORDER_ANY, ipc_entry_sysinit, NULL);

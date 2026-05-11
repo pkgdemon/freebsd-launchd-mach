@@ -1150,8 +1150,12 @@ task_sysinit(void *arg __unused)
 							NULL, NULL, uma_task_init,
 							uma_task_fini, 1, 0);
 
+	#if 0 /*PhaseB-bisect*/
 	EVENTHANDLER_REGISTER(process_init, mach_task_init, NULL, EVENTHANDLER_PRI_ANY);
+#endif
+	#if 0 /*PhaseB-bisect*/
 	EVENTHANDLER_REGISTER(process_fork, mach_task_fork, NULL, EVENTHANDLER_PRI_ANY);
+#endif
 }
 
 /* before SI_SUB_INTRINSIC and after SI_SUB_EVENTHANDLER */
