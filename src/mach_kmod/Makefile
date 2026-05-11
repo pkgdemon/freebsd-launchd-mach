@@ -83,7 +83,7 @@ CFLAGS+=	-DCOMPAT_MACH
 # then prevents the gated declarations from ever being parsed even when
 # a later file #defines MACH_INTERNAL. Promote to CFLAGS so every TU
 # sees it from the start.
-CFLAGS+=	-DMACH_INTERNAL
+CFLAGS+=	-DMACH_INTERNAL=	# bare-define form, matches in-source `#define MACH_INTERNAL`
 
 # AUDIT: GENERIC sets `options AUDIT`, which produces opt_audit.h with
 # #define AUDIT 1 in /usr/obj/.../<KERNCONF>/. Stock kmod builds against
