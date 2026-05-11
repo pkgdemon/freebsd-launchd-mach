@@ -81,4 +81,16 @@ CFLAGS+=	-DCOMPAT_MACH
 # syscall handlers. See include/compat_shim.h for rationale.
 CFLAGS+=	-include ${.CURDIR}/include/compat_shim.h
 
+# Mach defines ~50 Apple-shape syscall handlers (sys_mach_msg_trap,
+# sys_task_for_pid, ...). ravynOS auto-generates struct *_args + function
+# prototypes from its syscalls master file; we don't have that on stock
+# FreeBSD. The handler bodies compile fine — they just lack the headers
+# the compiler would normally see in an in-tree build. These two
+# warnings flag exactly that situation; demote from error to warning so
+# the kmod links. Sysent registration is a separate Phase-B follow-up;
+# until then no caller exists for these handlers, so the missing-
+# prototype / visibility complaints are moot.
+CFLAGS+=	-Wno-error=missing-prototypes
+CFLAGS+=	-Wno-error=visibility
+
 .include <bsd.kmod.mk>
