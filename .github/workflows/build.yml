@@ -1,0 +1,178 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (FreeBSD ${{ matrix.freebsd }} ${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        freebsd: ['15.0']
+        arch: ['amd64']
+        compress: ['zstd']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
+
+      - name: cache FreeBSD distfiles
+        uses: actions/cache@v4
+        with:
+          path: distfiles
+          key: distfiles-${{ matrix.freebsd }}-${{ matrix.arch }}-${{ hashFiles('pkglist.txt') }}
+
+      - name: build ISO inside FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: ${{ matrix.freebsd }}
+          mem: 8192
+          cpu: 4
+          usesh: true
+          sync: rsync
+          copyback: true
+          prepare: |
+            pkg install -y bash git rsync
+          run: |
+            set -eu
+            export FREEBSD_VERSION=${{ matrix.freebsd }}
+            export ARCH=${{ matrix.arch }}
+            export COMPRESS=${{ matrix.compress }}
+            sh build.sh
+
+      - name: artifact summary
+        run: |
+          ls -lh out/
+          (cd out && sha256sum *.iso) | tee out/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: livecd-${{ matrix.freebsd }}-${{ matrix.arch }}-${{ matrix.compress }}
+          path: |
+            out/livecd.iso
+            out/SHA256SUMS
+          retention-days: 14
+          if-no-files-found: error
+
+  test:
+    name: test (FreeBSD ${{ matrix.freebsd }} ${{ matrix.arch }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        freebsd: ['15.0']
+        arch: ['amd64']
+        compress: ['zstd']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: livecd-${{ matrix.freebsd }}-${{ matrix.arch }}-${{ matrix.compress }}
+          path: out/
+
+      - name: install qemu + expect
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 expect ovmf
+
+      - name: boot test
+        run: |
+          chmod +x tests/boot-test.sh
+          ./tests/boot-test.sh out/livecd.iso
+
+      - name: upload boot log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-log-${{ matrix.freebsd }}-${{ matrix.arch }}
+          path: tests/boot.log
+          if-no-files-found: ignore
+
+  release:
+    name: release (FreeBSD ${{ matrix.freebsd }} ${{ matrix.arch }})
+    needs: [build, test]
+    # Only publish when both jobs pass on a push to main. PRs and other
+    # branches build + test but never publish.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        freebsd: ['15.0']
+        arch: ['amd64']
+        compress: ['zstd']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: livecd-${{ matrix.freebsd }}-${{ matrix.arch }}-${{ matrix.compress }}
+          path: out/
+
+      - name: prepare release assets (rename to dated public name)
+        id: prep
+        run: |
+          set -eu
+          DATE=$(date -u +%Y%m%d)
+          DATED="FreeBSD-${{ matrix.freebsd }}-${{ matrix.arch }}-mach-${DATE}.iso"
+          cp out/livecd.iso "out/${DATED}"
+          ( cd out && sha256sum "${DATED}" > "${DATED}.sha256" )
+          ls -lh "out/${DATED}" "out/${DATED}.sha256"
+          echo "dated=${DATED}" >> "$GITHUB_OUTPUT"
+
+      # `gh release create` wedges silently on big ISO uploads (single PUT,
+      # no chunking, no retry). softprops/action-gh-release uses Octokit's
+      # chunked upload with retries -- canonical path for big release assets.
+      # Delete previous continuous release first so old assets don't pile up.
+      #
+      # NOTE: when matrix grows to multiple cells (e.g. adding aarch64 or a
+      # zlib variant), this delete will race across cells. At that point
+      # refactor to a single non-matrix release job that downloads all
+      # artifacts and publishes them together.
+      - name: delete previous continuous release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete continuous --yes --cleanup-tag \
+            --repo "$GITHUB_REPOSITORY" || true
+
+      - name: publish to continuous release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: Continuous build
+          body: |
+            Rolling continuous build. Refreshed automatically every push to
+            `main` after the build + boot smoke-test both pass.
+
+            Build log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Commit: ${{ github.sha }}
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          fail_on_unmatched_files: true
+          files: |
+            out/${{ steps.prep.outputs.dated }}
+            out/${{ steps.prep.outputs.dated }}.sha256

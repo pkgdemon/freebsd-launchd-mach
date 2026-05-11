@@ -1,0 +1,10 @@
+# One pkg per line; lines starting with # are ignored.
+# Build-only packages — installed in the chroot, purged before the slim
+# pass so they don't ship in the ISO.
+#
+# Phase A: empty. No in-chroot compilation. base.txz + kernel.txz + overlays
+# is the whole pipeline.
+#
+# Phase B will add nothing here either — the mach.ko kernel module is built
+# against /usr/src/sys/ kernel headers from src.txz (extracted in build.sh
+# for mkisoimages.sh anyway), no extra packages needed.

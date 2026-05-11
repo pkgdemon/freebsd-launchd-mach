@@ -1,0 +1,23 @@
+freebsd-launchd-mach
+Copyright 2026 Joseph Maloney and contributors
+
+Licensed under BSD-2-Clause (see LICENSE).
+
+Scaffolding files (build.sh, .github/workflows/, boot/, ramdisk/, scripts/,
+tests/, kmodloader/, overlays/) are derived from the freebsd-launchd repo
+(BSD-2-Clause) at https://github.com/pkgdemon/freebsd-launchd.
+
+Phase B onward will import the following third-party source. Per-file
+license headers are preserved on import; this NOTICE will be expanded as
+each component lands:
+
+  - ravynOS legacy FreeBSD branch
+    (sys/compat/mach/ kernel Mach IPC implementation, OSF License /
+     CMU License / BSD 2-Clause, derived from NextBSD's port of XNU's
+     osfmk/ipc/)
+    https://github.com/ravynsoft/ravynos
+    Will be imported under mach-kmod/ in Phase B.
+
+Future phases (post-checkpoint) will import additional Apple-direct
+sources (launchd, configd, IPConfiguration), the iXsystems libxpc from
+ravynOS, and other components. NOTICE will be updated at each import.

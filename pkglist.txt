@@ -1,0 +1,33 @@
+# One pkg per line; lines starting with # are ignored.
+# Runtime packages — installed in the chroot and shipped in the ISO.
+# Distinct from buildpkgs.txt, which is purged before slim.
+#
+# Phase A target: vanilla FreeBSD ISO with the standard set of firmware
+# blobs and a working network stack. No GNUstep, no launchd-specific
+# packages. Phase B+ will add as needed.
+
+# GPU firmware blobs metaport — pulls all flavored gpu-firmware-*-kmod
+# subpackages. Useful to have available even if Phase A doesn't yet have
+# kmodloader auto-loading them; users can kldload by hand.
+gpu-firmware-kmod
+
+# WiFi firmware blobs. Drivers themselves are in base.txz; firmware kmods
+# are loaded when matching hardware attaches.
+wifi-firmware-iwlwifi-kmod
+wifi-firmware-rtw88-kmod
+wifi-firmware-rtw89-kmod
+
+# Hypervisor guest additions. Useful for live-ISO testing in VBox/VMware.
+virtualbox-ose-additions-nox11
+open-vm-tools-nox11
+
+# Network auto-config: dhcpcd in master mode replaces dhclient + rtsold
+# for IPv4 DHCP, IPv6 DHCPv6, RA/SLAAC processing, and link-state
+# handling. In Phase A this is invoked the normal FreeBSD way (rc.conf
+# ifconfig_DEFAULT="DHCP" + ipv6_activate_all_interfaces). Phase D will
+# move it under launchd.
+dhcpcd
+
+# Ports wpa_supplicant supersedes the base version: faster WPA3-SAE/OWE
+# uptake, current EAP method support, more aggressive CVE backports.
+wpa_supplicant
