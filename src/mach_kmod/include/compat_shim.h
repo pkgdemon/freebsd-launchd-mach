@@ -14,12 +14,14 @@
 
 /*
  * This shim is force-included via the Makefile's -include directive,
- * which fires before any other include in the .c file. The fixed-width
- * integer types we need below come from <sys/types.h>; pull it in here
- * so the typedefs are visible when the shim's own declarations are
- * parsed.
+ * which fires before any other include in the .c file. To avoid taking
+ * any header dependency this early, the struct fields below use plain
+ * C types instead of <sys/stdint.h> fixed-width typedefs. proc_info.c
+ * passes these fields through to proc_info() which takes uint32_t /
+ * uint64_t parameters — implicit integer conversion handles the gap
+ * cleanly on amd64 where unsigned int / unsigned long long match the
+ * underlying widths.
  */
-#include <sys/types.h>
 
 /*
  * ravynOS adds p_machdata / td_machdata fields to struct proc / struct
@@ -49,12 +51,12 @@
  * but are not yet wired into a sysent table).
  */
 struct __proc_info_args {
-	int		callnum;
-	int		pid;
-	uint32_t	flavor;
-	uint64_t	arg;
-	uint64_t	buffer;
-	int32_t		buffersize;
+	int			callnum;
+	int			pid;
+	unsigned int		flavor;		/* matches uint32_t on amd64 */
+	unsigned long long	arg;		/* matches uint64_t on amd64 */
+	unsigned long long	buffer;		/* matches uint64_t on amd64 */
+	int			buffersize;	/* matches int32_t on amd64 */
 };
 
 struct __iopolicysys_args {
