@@ -52,7 +52,10 @@ src_dir="$script_dir/src/mach_kmod"
 }
 
 # bsd.kmod.mk works with FreeBSD's base make.
-MAKE_ARGS="SYSDIR=$SYSDIR"
+# KMODDIR=/boot/kernel — bsd.kmod.mk's default is actually /boot/modules
+# for third-party modules; we want /boot/kernel so build.sh's BOOT_MODULES
+# staging picks it up from the standard kernel module directory.
+MAKE_ARGS="SYSDIR=$SYSDIR KMODDIR=/boot/kernel"
 if [ -n "$KERNBUILDDIR" ]; then
 	MAKE_ARGS="$MAKE_ARGS KERNBUILDDIR=$KERNBUILDDIR"
 fi
@@ -60,8 +63,16 @@ fi
 # shellcheck disable=SC2086
 make -C "$src_dir" $MAKE_ARGS
 
-# Install. bsd.kmod.mk's default is KMODDIR=/boot/kernel.
+# Pre-create install target directories. bsd.kmod.mk's install rules
+# don't create /boot/kernel or /usr/lib/debug/boot/kernel beforehand,
+# and `install` fails if the destination dir doesn't exist.
+mkdir -p "${DESTDIR}/boot/kernel"
+mkdir -p "${DESTDIR}/usr/lib/debug/boot/kernel"
+
+# Install. MK_KERNEL_SYMBOLS=no skips the .ko.debug install — useful
+# for the live ISO where debug symbols aren't shipped. (We mkdir'd the
+# dir above too, in case future builds re-enable symbols.)
 # shellcheck disable=SC2086
-make -C "$src_dir" install $MAKE_ARGS DESTDIR="$DESTDIR"
+make -C "$src_dir" install $MAKE_ARGS DESTDIR="$DESTDIR" MK_KERNEL_SYMBOLS=no
 
 echo "==> make-mach-kmod: mach.ko installed to ${DESTDIR}/boot/kernel/mach.ko"
