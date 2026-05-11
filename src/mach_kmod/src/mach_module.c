@@ -113,9 +113,25 @@ mach_mod_init(void)
 		printf("failed to register osx calls: %d\n", err);
 		return (EINVAL);
 	}
+	/*
+	 * Out-of-tree workaround: stock FreeBSD's kqueue_add_filteropts
+	 * rejects EVFILT_MACHPORT (-16) because it's out of bounds —
+	 * sysfilt_ops[] is sized EVFILT_SYSCOUNT (15), so only filter IDs
+	 * -1..-15 are valid. ravynOS patches <sys/event.h> to bump
+	 * EVFILT_SYSCOUNT and allocate a -16 slot. We can't make that
+	 * kernel-side patch.
+	 *
+	 * Make the failure non-fatal so mach.ko still loads. Mach kqueue
+	 * filter registration is a Phase-B-and-beyond concern; today's
+	 * smoke test only requires kldstat -m mach to succeed. Any
+	 * downstream code attempting EV_ADD with EVFILT_MACHPORT will
+	 * just get EINVAL from kqueue itself.
+	 */
 	if (kqueue_add_filteropts(EVFILT_MACHPORT, &machport_filtops)) {
-		printf("failed to register machport_filtops\n");
-		return (EINVAL);
+		printf("mach: kqueue_add_filteropts(EVFILT_MACHPORT) failed; "
+		    "filter unavailable (expected on stock FreeBSD without "
+		    "the EVFILT_SYSCOUNT bump)\n");
+		/* fall through — module still useful for non-kqueue Mach IPC */
 	}
 	return (0);
 }

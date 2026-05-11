@@ -239,7 +239,20 @@ mach_thread_init(void *arg __unused, struct thread *td)
 static void
 mach_thread_fini(void *arg __unused, struct thread *td)
 {
-	thread_t thread = td->td_machdata;
+	thread_t thread;
+
+	/*
+	 * Out-of-tree fix: this thread_fini handler fires for every
+	 * thread in the kernel, including threads that existed before
+	 * mach.ko loaded (so mach_thread_init never ran on them) and
+	 * threads of processes that never picked up Mach state.
+	 * td_machdata (aliased to td_emuldata via compat_shim.h) is
+	 * NULL for those. Without this guard the very next thread to
+	 * exit page-faults inside this handler, panicking the kernel.
+	 */
+	thread = td->td_machdata;
+	if (thread == NULL)
+		return;
 
 	MPASS(thread->ith_kmsg == NULL);
 	MPASS(thread->ith_td == td);
@@ -251,7 +264,12 @@ mach_thread_fini(void *arg __unused, struct thread *td)
 static void
 mach_thread_ctor(void *arg __unused, struct thread *td)
 {
-	thread_t thread = td->td_machdata;
+	thread_t thread;
+
+	/* Same NULL-guard rationale as mach_thread_fini above. */
+	thread = td->td_machdata;
+	if (thread == NULL)
+		return;
 
 	MPASS(thread->ith_td == td);
 	mach_thread_create(td, thread);

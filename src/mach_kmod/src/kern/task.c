@@ -1112,8 +1112,15 @@ mach_task_init(void *arg __unused, struct proc *p)
 static void
 mach_task_fork(void *arg __unused, struct proc *p1, struct proc *p2, int flags __unused)
 {
-	task_t task = p2->p_machdata;
-	task_t parent_task = p1->p_machdata;
+	task_t task;
+	task_t parent_task;
+
+	/* Out-of-tree fix: same as the other event handlers — only run
+	 * for Mach-aware processes. */
+	task = p2->p_machdata;
+	parent_task = p1->p_machdata;
+	if (task == NULL || parent_task == NULL)
+		return;
 
 	atomic_add_long(&task_uniqueid, 1);
 	task->itk_uniqueid = task_uniqueid;
