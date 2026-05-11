@@ -146,16 +146,15 @@ _MACH_KMOD_APPLE_SYSCALL_STUB(mk_timer_arm);
 _MACH_KMOD_APPLE_SYSCALL_STUB(mk_timer_cancel);
 
 /*
- * Phase B: do not actually register these syscalls at module load.
- * Hijack syscall_helper_register so it's a no-op returning success.
- * The osx_syscalls[] array still gets built so the compile succeeds,
- * and mach_mod_init() proceeds to the kqueue_add_filteropts step
- * uneventfully. Real sysent registration is a separate Phase-B
- * follow-up that needs a syscalls master file and proper SYS_*
- * numbers per Apple's ABI — none of which is on Phase B's exit gate.
+ * Phase B: syscalls register dynamically. Each entry's syscall_no field
+ * is set to NO_SYSCALL (-1) via the stubs above, which tells
+ * syscall_helper_register / kern_syscall_register to allocate a free
+ * slot at runtime instead of using a fixed number. We don't macro-
+ * hijack syscall_helper_register here — that would clash with the
+ * function declaration in <sys/sysent.h>. If the runtime dynamic
+ * allocation fails for some entries, we'll see that in the boot smoke
+ * test and iterate.
  */
-#define	syscall_helper_register(table, flags)	(0)
-#define	syscall_helper_unregister(table)	(0)
 
 #endif /* _KERNEL */
 
