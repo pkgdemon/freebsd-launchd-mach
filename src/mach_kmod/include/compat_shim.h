@@ -68,6 +68,29 @@ int sys___proc_info(struct thread *td, struct __proc_info_args *uap);
 int sys___iopolicysys(struct thread *td, struct __iopolicysys_args *uap);
 
 /*
+ * SYS_/SYS_AUE_ constants for the two syscalls whose struct *_args
+ * needed real field definitions (proc_info.c reads them). The other
+ * 47 syscalls get their constants via the _MACH_KMOD_APPLE_SYSCALL_STUB
+ * macro below.
+ */
+enum {
+	SYS___proc_info		= -1,	/* NO_SYSCALL */
+	SYS_AUE___proc_info	= 0,	/* AUE_NULL */
+	SYS___iopolicysys	= -1,	/* NO_SYSCALL */
+	SYS_AUE___iopolicysys	= 0,	/* AUE_NULL */
+};
+
+/*
+ * EVFILT_MACHPORT — Apple kqueue filter ID for Mach port events.
+ * ravynOS patches FreeBSD's <sys/event.h> to add this. Stock FreeBSD
+ * reserves filter IDs -1 .. -EVFILT_SYSCOUNT (currently -15) for
+ * built-in filters; -16 is outside that range and safe to claim for
+ * a kmod-registered filter via kqueue_add_filteropts(EVFILT_MACHPORT,
+ * &machport_filtops).
+ */
+#define	EVFILT_MACHPORT		(-16)
+
+/*
  * Apple Mach trap and BSD-extension syscalls referenced by
  * mach_module.c's SYSCALL_INIT_HELPER list. ravynOS auto-generates
  * their struct *_args, SYS_*, and SYS_AUE_* constants from a syscalls
