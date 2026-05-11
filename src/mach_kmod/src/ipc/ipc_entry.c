@@ -698,6 +698,18 @@ ipc_entry_list_close(void *arg __unused, struct proc *p)
 	ipc_space_t space;
 	int i;
 
+	/*
+	 * Out-of-tree fix: this event handler is registered for every
+	 * process_exit / process_exec in the kernel, but only processes
+	 * that have been initialized with a Mach task have p_machdata
+	 * set (via mach_task_init). Without that guard, ipc_entry_list_close
+	 * was page-faulting on current_space() -> p_machdata->itk_space
+	 * for any non-Mach process, including kldload itself right after
+	 * loading mach.ko. Skip processes that never picked up Mach state.
+	 */
+	if (p->p_machdata == NULL || curthread->td_proc->p_machdata == NULL)
+		return;
+
 	fdp = p->p_fd;
 	td = curthread;
 	space = current_space();
