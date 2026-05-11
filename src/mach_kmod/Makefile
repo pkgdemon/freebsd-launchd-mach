@@ -75,6 +75,15 @@ CFLAGS+=	-I${.CURDIR}/include
 CFLAGS+=	-I${.CURDIR}
 CFLAGS+=	-DCOMPAT_MACH
 
+# AUDIT: GENERIC sets `options AUDIT`, which produces opt_audit.h with
+# #define AUDIT 1 in /usr/obj/.../<KERNCONF>/. Stock kmod builds against
+# SRCS-listed opt_*.h DON'T force-include those — the .h entries just
+# get stub-touched in OBJDIR. We set the define directly here to match
+# what a GENERIC build would see; users with kernels that disable AUDIT
+# can override with `make KERNBUILDDIR=...` and bsd.kmod.mk will pick
+# their actual opt_audit.h up (which won't define AUDIT, undoing this).
+CFLAGS+=	-DAUDIT
+
 # Force-include the out-of-tree compat shim. Provides aliases for
 # struct proc/thread fields ravynOS added (p_machdata -> p_emuldata,
 # td_machdata -> td_emuldata) and stub declarations for Apple-shape
