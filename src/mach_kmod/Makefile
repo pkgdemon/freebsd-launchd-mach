@@ -46,7 +46,7 @@ WERROR=
 # (matching GENERIC). If KERNBUILDDIR is set, bsd.kmod.mk uses the
 # kernel build's actual opt_*.h instead. See README for details.
 SRCS=	bus_if.h device_if.h vnode_if.h
-SRCS+=	opt_compat_mach.h opt_ntp.h opt_capsicum.h
+SRCS+=	opt_compat_mach.h opt_ntp.h opt_capsicum.h opt_audit.h
 
 # MIG-generated server stubs (pre-checked in; no mig invocation at build).
 SRCS+=	host_priv_server.c mach_host_server.c mach_port_server.c mach_vm_server.c
