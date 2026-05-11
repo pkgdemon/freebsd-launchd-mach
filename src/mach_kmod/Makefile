@@ -75,4 +75,10 @@ CFLAGS+=	-I${.CURDIR}/include
 CFLAGS+=	-I${.CURDIR}
 CFLAGS+=	-DCOMPAT_MACH
 
+# Force-include the out-of-tree compat shim. Provides aliases for
+# struct proc/thread fields ravynOS added (p_machdata -> p_emuldata,
+# td_machdata -> td_emuldata) and stub declarations for Apple-shape
+# syscall handlers. See include/compat_shim.h for rationale.
+CFLAGS+=	-include ${.CURDIR}/include/compat_shim.h
+
 .include <bsd.kmod.mk>
