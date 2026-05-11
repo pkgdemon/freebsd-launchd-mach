@@ -185,52 +185,36 @@ _MACH_KMOD_APPLE_SYSCALL_STUB(mk_timer_cancel);
 /*
  * Three VM functions ravynOS's mach_vm.c calls are static inline in
  * stock FreeBSD's vm/vm_map.c — not exported to modules. Provide
- * out-of-tree replacements so the compile + link succeeds.
+ * replacements as macros that expand at the call site, where <vm/vm_map.h>
+ * is already in scope (mach_vm.c #include's it). Doing this with
+ * static-inline definitions in the shim doesn't work because
+ * <vm/vm_map.h> can't be included safely from a force-included header:
+ * its struct vm_map references pmap_t (from <machine/pmap.h>), which
+ * the kernel build expects to be brought in by the .c file before
+ * <vm/vm_map.h>, not from a force-include header.
  *
- * - vm_map_entry_pred: re-implemented faithfully from the static
- *   inline in vm_map.c (uses only the public struct vm_map_entry
- *   fields, which are in vm/vm_map.h).
+ * - vm_map_entry_pred: macro version of the static inline in vm_map.c,
+ *   using GCC statement-expression. Uses only public struct
+ *   vm_map_entry fields (left/right/start).
  *
- * - vm_map_clip_start / vm_map_clip_end: stubbed as no-ops returning
- *   KERN_SUCCESS. The only call site in mach_vm.c is inside an
- *   if (src_destroy) path of vm_map_copy_overwrite() which is not
- *   exercised by Phase B's smoke test ("kldstat -m mach"). When the
- *   destroying-copy path is needed for real, these stubs need to be
- *   replaced with proper implementations — likely via a thin C
- *   reimplementation against vm_map_lock + vm_map_entry_link.
+ * - vm_map_clip_start / vm_map_clip_end: stub macros that evaluate to 0
+ *   (KERN_SUCCESS). The only call site in mach_vm.c is inside an
+ *   if (src_destroy) path of vm_map_copy_overwrite(), which Phase B's
+ *   smoke test doesn't exercise. When the destroy-copy path is needed
+ *   for real (later phase), these stubs need real implementations.
  */
-#include <vm/vm.h>
-#include <vm/vm_map.h>
+#define	vm_map_entry_pred(entry_) __extension__ ({			\
+	vm_map_entry_t _prior = (entry_)->left;				\
+	if (_prior->right->start < (entry_)->start) {			\
+		do							\
+			_prior = _prior->right;				\
+		while (_prior->right != (entry_));			\
+	}								\
+	_prior;								\
+})
 
-static __inline vm_map_entry_t
-vm_map_entry_pred(vm_map_entry_t entry)
-{
-	vm_map_entry_t prior;
-
-	prior = entry->left;
-	if (prior->right->start < entry->start) {
-		do
-			prior = prior->right;
-		while (prior->right != entry);
-	}
-	return (prior);
-}
-
-static __inline int
-vm_map_clip_start(vm_map_t map __unused, vm_map_entry_t entry __unused,
-    vm_offset_t startaddr __unused)
-{
-
-	return (0);	/* KERN_SUCCESS — stub, see comment above */
-}
-
-static __inline int
-vm_map_clip_end(vm_map_t map __unused, vm_map_entry_t entry __unused,
-    vm_offset_t endaddr __unused)
-{
-
-	return (0);	/* KERN_SUCCESS — stub, see comment above */
-}
+#define	vm_map_clip_start(map_, entry_, startaddr_)	((void)(map_), (void)(entry_), (void)(startaddr_), 0)
+#define	vm_map_clip_end(map_, entry_, endaddr_)		((void)(map_), (void)(entry_), (void)(endaddr_), 0)
 
 #endif /* _KERNEL */
 
