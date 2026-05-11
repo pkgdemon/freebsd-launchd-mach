@@ -88,6 +88,26 @@ enum {
 #define	EVFILT_MACHPORT		(-16)
 
 /*
+ * Apple-shape file-descriptor type tags ravynOS adds to FreeBSD headers
+ * so Mach ports can be wrapped as file descriptors visible to procstat,
+ * fstat, etc. Stock FreeBSD has none of these defined. Values match
+ * ravynOS's sys/sys/stat.h, sys/sys/file.h, sys/sys/user.h.
+ */
+#define	S_IFPORT	0150000		/* mach port */
+#define	S_IFPSET	0160000		/* mach portset */
+#define	DTYPE_MACH_IPC	32		/* port or portset */
+#define	KF_TYPE_PORT	253
+#define	KF_TYPE_PORTSET	254
+
+/*
+ * ipc_entry.c calls audit_sysclose, which IS in stock FreeBSD with the
+ * same signature — just declared in <security/audit/audit.h>, which
+ * ipc_entry.c doesn't include directly. Pull it in here so the
+ * prototype is visible.
+ */
+#include <security/audit/audit.h>
+
+/*
  * Apple Mach trap and BSD-extension syscalls referenced by
  * mach_module.c's SYSCALL_INIT_HELPER list. ravynOS auto-generates
  * their struct *_args, SYS_*, and SYS_AUE_* constants from a syscalls
