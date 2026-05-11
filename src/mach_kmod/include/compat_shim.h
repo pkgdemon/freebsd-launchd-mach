@@ -67,6 +67,93 @@ struct thread;
 int sys___proc_info(struct thread *td, struct __proc_info_args *uap);
 int sys___iopolicysys(struct thread *td, struct __iopolicysys_args *uap);
 
+/*
+ * Apple Mach trap and BSD-extension syscalls referenced by
+ * mach_module.c's SYSCALL_INIT_HELPER list. ravynOS auto-generates
+ * their struct *_args, SYS_*, and SYS_AUE_* constants from a syscalls
+ * master file we don't ship. Stub them here so mach_module.c's
+ * osx_syscalls[] array initialization compiles.
+ *
+ * Each stub provides:
+ *   - struct NAME_args { int dummy; }  (sizeof() works for sy_narg calc)
+ *   - SYS_NAME           = NO_SYSCALL  (request dynamic syscall slot)
+ *   - SYS_AUE_NAME       = AUE_NULL    (no audit event)
+ *
+ * The handler bodies (sys_NAME) are defined in the ravynOS source
+ * files; we only declare the prototype here so the address-taking in
+ * SYSCALL_INIT_HELPER resolves. Phase B does NOT actually register
+ * these via syscall_helper_register — see the wrapper macro below.
+ */
+#include <sys/syscall.h>		/* NO_SYSCALL */
+#include <bsm/audit_kevents.h>		/* AUE_NULL */
+
+#define	_MACH_KMOD_APPLE_SYSCALL_STUB(name)				\
+	struct name ## _args { int _stub; };				\
+	int sys_ ## name(struct thread *, struct name ## _args *);	\
+	enum {								\
+		SYS_ ## name = NO_SYSCALL,				\
+		SYS_AUE_ ## name = AUE_NULL				\
+	}
+
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_vm_allocate_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_vm_deallocate_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_vm_protect_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_vm_map_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_allocate_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_destroy_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_deallocate_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_mod_refs_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_move_member_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_insert_right_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_insert_member_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_extract_member_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_construct_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_destruct_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_guard_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(_kernelrpc_mach_port_unguard_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mach_reply_port);
+_MACH_KMOD_APPLE_SYSCALL_STUB(thread_self_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(task_self_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(host_self_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mach_msg_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mach_msg_overwrite_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(semaphore_signal_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(semaphore_signal_all_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(semaphore_signal_thread_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(semaphore_wait_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(semaphore_wait_signal_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(semaphore_timedwait_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(semaphore_timedwait_signal_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(task_for_pid);
+_MACH_KMOD_APPLE_SYSCALL_STUB(pid_for_task);
+_MACH_KMOD_APPLE_SYSCALL_STUB(macx_swapon);
+_MACH_KMOD_APPLE_SYSCALL_STUB(macx_swapoff);
+_MACH_KMOD_APPLE_SYSCALL_STUB(macx_triggers);
+_MACH_KMOD_APPLE_SYSCALL_STUB(macx_backing_store_suspend);
+_MACH_KMOD_APPLE_SYSCALL_STUB(macx_backing_store_recovery);
+_MACH_KMOD_APPLE_SYSCALL_STUB(swtch_pri);
+_MACH_KMOD_APPLE_SYSCALL_STUB(swtch);
+_MACH_KMOD_APPLE_SYSCALL_STUB(thread_switch);
+_MACH_KMOD_APPLE_SYSCALL_STUB(clock_sleep_trap);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mach_timebase_info);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mach_wait_until);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mk_timer_create);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mk_timer_destroy);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mk_timer_arm);
+_MACH_KMOD_APPLE_SYSCALL_STUB(mk_timer_cancel);
+
+/*
+ * Phase B: do not actually register these syscalls at module load.
+ * Hijack syscall_helper_register so it's a no-op returning success.
+ * The osx_syscalls[] array still gets built so the compile succeeds,
+ * and mach_mod_init() proceeds to the kqueue_add_filteropts step
+ * uneventfully. Real sysent registration is a separate Phase-B
+ * follow-up that needs a syscalls master file and proper SYS_*
+ * numbers per Apple's ABI — none of which is on Phase B's exit gate.
+ */
+#define	syscall_helper_register(table, flags)	(0)
+#define	syscall_helper_unregister(table)	(0)
+
 #endif /* _KERNEL */
 
 #endif /* _MACH_KMOD_COMPAT_SHIM_H_ */
