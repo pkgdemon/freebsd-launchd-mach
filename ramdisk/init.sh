@@ -84,8 +84,17 @@ if [ "$$" = "1" ]; then
     # which chroots and execs /sbin/init (still PID 1). init inherits.
     # Standard FreeBSD multi-user boot proceeds from there.
     #
+    # Unset init_script / init_shell kenvs first: stock /sbin/init reads
+    # init_script at startup and forks a child to run it. If the kenv is
+    # still set to "/init.sh" (from loader.conf) when we exec init in the
+    # chroot, init's child looks for /init.sh INSIDE the chroot (where it
+    # doesn't exist) and bombs out to single-user mode. Same fix as the
+    # fallback path below uses.
+    #
     # Phase D will replace /sbin/init with /sbin/launchd once Apple's
     # launchd is in the build.
+    kenv -u init_script 2>/dev/null || true
+    kenv -u init_shell  2>/dev/null || true
     exec /rescue/chroot /sysroot /sbin/init
 fi
 
