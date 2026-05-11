@@ -75,6 +75,16 @@ CFLAGS+=	-I${.CURDIR}/include
 CFLAGS+=	-I${.CURDIR}
 CFLAGS+=	-DCOMPAT_MACH
 
+# MACH_INTERNAL: <sys/mach/message.h> gates some internal-only prototypes
+# (mach_msg_receive_results, etc.) behind #if defined(MACH_INTERNAL).
+# ravynOS source files individually #define this before their #includes,
+# but our compat_shim.h force-includes _mach_sysproto.h which pulls
+# message.h up front (without MACH_INTERNAL set), and the include guard
+# then prevents the gated declarations from ever being parsed even when
+# a later file #defines MACH_INTERNAL. Promote to CFLAGS so every TU
+# sees it from the start.
+CFLAGS+=	-DMACH_INTERNAL
+
 # AUDIT: GENERIC sets `options AUDIT`, which produces opt_audit.h with
 # #define AUDIT 1 in /usr/obj/.../<KERNCONF>/. Stock kmod builds against
 # SRCS-listed opt_*.h DON'T force-include those — the .h entries just

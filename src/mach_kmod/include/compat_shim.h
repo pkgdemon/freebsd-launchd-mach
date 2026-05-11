@@ -88,6 +88,14 @@ enum {
 #define	EVFILT_MACHPORT		(-16)
 
 /*
+ * kn_ext: ravynOS adds `#define kn_ext kn_kevent.ext` to <sys/event.h>
+ * so kqueue filters can stash Mach receive-msg pointer + size in the
+ * kevent's existing ext[4] array. Stock FreeBSD's struct kevent already
+ * has the ext[] field; we just need the alias.
+ */
+#define	kn_ext		kn_kevent.ext
+
+/*
  * Apple-shape file-descriptor type tags ravynOS adds to FreeBSD headers
  * so Mach ports can be wrapped as file descriptors visible to procstat,
  * fstat, etc. Stock FreeBSD has none of these defined. Values match
