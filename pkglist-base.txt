@@ -88,7 +88,8 @@ FreeBSD-pam-lib
 FreeBSD-libblocksruntime
 FreeBSD-libcasper
 FreeBSD-libthread_db
-FreeBSD-libcompiler_rt
+# Note: there is no FreeBSD-libcompiler_rt runtime pkg — only the -dev
+# variant. The runtime libcompiler_rt.so is bundled in FreeBSD-clibs.
 FreeBSD-libexecinfo
 FreeBSD-libmagic
 
