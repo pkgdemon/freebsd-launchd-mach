@@ -16,10 +16,11 @@
  * we expose it via `sysctl mach.syscall.<name>` so userland test code
  * can find it.
  *
- * Phase B / Tier 1 B scope: wire ONE syscall (sys_mach_reply_port).
- * No-args, returns a port name. Easiest to test from userland with
- * `syscall(num)`. Once this works, more syscalls can be added by
- * extending the static array below.
+ * Phase B / Tier 1 B scope: wire the no-arg "trap" family
+ * (mach_reply_port, task_self_trap, …). Each entry adds a per-syscall
+ * sysent + offset + sysctl. Same NULL-guard wrapper pattern: if the
+ * caller has no Mach state (p_machdata == NULL), return MACH_PORT_NULL
+ * instead of NULL-faulting in current_task().
  */
 
 #include <sys/cdefs.h>
@@ -34,13 +35,14 @@
 #include <bsm/audit_kevents.h>		/* AUE_NULL */
 
 /*
- * Forward-declare struct mach_reply_port_args. The full definition
- * comes from <sys/mach/_mach_sysproto.h> via mach_types.h's force-
- * include in compat_shim.h. We only need the prototype shape here
- * because we just take a pointer to sys_mach_reply_port; the args
- * struct isn't dereferenced from this file.
+ * Forward-declare per-syscall arg structs. Full definitions come from
+ * <sys/mach/_mach_sysproto.h> via mach_types.h's force-include in
+ * compat_shim.h. We only need the prototype shape here because we
+ * just take pointers to the sys_* handlers; the args structs aren't
+ * dereferenced from this file.
  */
 struct mach_reply_port_args;
+struct task_self_trap_args;
 
 SYSCTL_DECL(_mach);
 static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
@@ -58,19 +60,14 @@ static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
  * satisfy this; processes that existed before will fault.
  */
 int sys_mach_reply_port(struct thread *, struct mach_reply_port_args *);
+int sys_task_self_trap(struct thread *, struct task_self_trap_args *);
 
 /*
- * Wrapper around sys_mach_reply_port that returns MACH_PORT_NULL (0)
- * when the calling process has no Mach state (p_machdata == NULL).
- * Without this guard, sys_mach_reply_port -> mach_reply_port ->
- * current_task()->itk_space deref page-faults for processes whose
- * mach_task_init didn't run.
- *
- * Phase B: this makes the wired syscall demonstration-callable from
- * any process. The "no Mach state" path returns the same value Apple's
- * API would return on no-resources (MACH_PORT_NULL=0). A future
- * Phase C lazy-init helper or libmach's mach_task_init can promote
- * the caller to a real Mach-aware state.
+ * NULL-guard wrappers. The "no Mach state" path returns MACH_PORT_NULL
+ * (0) — the same value Apple's API would return on no-resources —
+ * instead of NULL-faulting in current_task() / itk_space. A future
+ * Phase C lazy-init helper can promote the caller to a real
+ * Mach-aware state.
  */
 static int
 sys_mach_reply_port_guarded(struct thread *td, struct mach_reply_port_args *uap)
@@ -82,6 +79,16 @@ sys_mach_reply_port_guarded(struct thread *td, struct mach_reply_port_args *uap)
 	return (sys_mach_reply_port(td, uap));
 }
 
+static int
+sys_task_self_trap_guarded(struct thread *td, struct task_self_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 0;	/* MACH_PORT_NULL */
+		return (0);
+	}
+	return (sys_task_self_trap(td, uap));
+}
+
 static struct sysent mach_reply_port_sysent = {
 	.sy_narg	= 0,
 	.sy_call	= (sy_call_t *)sys_mach_reply_port_guarded,
@@ -89,49 +96,80 @@ static struct sysent mach_reply_port_sysent = {
 	.sy_flags	= 0,
 };
 
+static struct sysent task_self_trap_sysent = {
+	.sy_narg	= 0,
+	.sy_call	= (sy_call_t *)sys_task_self_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
 static int mach_reply_port_offset = NO_SYSCALL;
 static struct sysent mach_reply_port_old_sysent;
+
+static int task_self_trap_offset = NO_SYSCALL;
+static struct sysent task_self_trap_old_sysent;
 
 SYSCTL_INT(_mach_syscall, OID_AUTO, mach_reply_port, CTLFLAG_RD,
     &mach_reply_port_offset, 0,
     "Dynamically-allocated FreeBSD syscall number for mach_reply_port "
     "(-1 if registration failed)");
 
+SYSCTL_INT(_mach_syscall, OID_AUTO, task_self_trap, CTLFLAG_RD,
+    &task_self_trap_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for task_self_trap "
+    "(-1 if registration failed)");
+
+static void
+wire_one(const char *name, int *offset, struct sysent *sy,
+    struct sysent *old_sy)
+{
+	int error;
+
+	error = kern_syscall_register(sysent, offset, sy, old_sy,
+	    SY_THR_STATIC_KLD);
+	if (error != 0) {
+		printf("mach: syscall_register(%s) failed: %d\n", name, error);
+		*offset = NO_SYSCALL;
+		return;
+	}
+	printf("mach: %s registered at syscall %d\n", name, *offset);
+}
+
+static void
+unwire_one(const char *name, int *offset, struct sysent *old_sy)
+{
+	int error;
+
+	if (*offset == NO_SYSCALL)
+		return;
+	error = kern_syscall_deregister(sysent, *offset, old_sy);
+	if (error != 0)
+		printf("mach: syscall_deregister(%s) failed: %d\n", name, error);
+}
+
 static void
 mach_syscall_wire_register(void *arg __unused)
 {
-	int error;
 
 	/*
 	 * Pass `sysent` (the global FreeBSD syscall table) as the target.
 	 * kern_syscall_register handles offset==NO_SYSCALL specially by
 	 * finding a free slot and writing it back.
 	 */
-	error = kern_syscall_register(sysent, &mach_reply_port_offset,
-	    &mach_reply_port_sysent, &mach_reply_port_old_sysent,
-	    SY_THR_STATIC_KLD);
-	if (error != 0) {
-		printf("mach: syscall_register(mach_reply_port) failed: %d\n",
-		    error);
-		mach_reply_port_offset = NO_SYSCALL;
-		return;
-	}
-	printf("mach: sys_mach_reply_port registered at syscall %d\n",
-	    mach_reply_port_offset);
+	wire_one("mach_reply_port", &mach_reply_port_offset,
+	    &mach_reply_port_sysent, &mach_reply_port_old_sysent);
+	wire_one("task_self_trap", &task_self_trap_offset,
+	    &task_self_trap_sysent, &task_self_trap_old_sysent);
 }
 
 static void
 mach_syscall_wire_deregister(void *arg __unused)
 {
-	int error;
 
-	if (mach_reply_port_offset == NO_SYSCALL)
-		return;
-	error = kern_syscall_deregister(sysent, mach_reply_port_offset,
+	unwire_one("task_self_trap", &task_self_trap_offset,
+	    &task_self_trap_old_sysent);
+	unwire_one("mach_reply_port", &mach_reply_port_offset,
 	    &mach_reply_port_old_sysent);
-	if (error != 0)
-		printf("mach: syscall_deregister(mach_reply_port) failed: %d\n",
-		    error);
 }
 
 /*
