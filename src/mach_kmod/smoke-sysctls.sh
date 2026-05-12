@@ -16,12 +16,31 @@ check() {
     fi
 }
 
-# Build the test helper if not present. Source travels with the repo.
+# Build test helpers if not present. Sources travel with the repo.
+HERE="$(dirname "$0")"
+LIBMACH_DIR="$HERE/../libmach"
 TEST_BIN=/tmp/test_mach_syscall0
-TEST_SRC="$(dirname "$0")/tests/test_mach_syscall0.c"
+TEST_SRC="$HERE/tests/test_mach_syscall0.c"
+TEST_LIBMACH_BIN=/tmp/test_libmach
+TEST_LIBMACH_SRC="$HERE/tests/test_libmach.c"
+
 if [ ! -x "$TEST_BIN" ] || [ "$TEST_SRC" -nt "$TEST_BIN" ]; then
     cc -O2 -o "$TEST_BIN" "$TEST_SRC" || {
         echo "FAIL build test_mach_syscall0"
+        FAIL=$((FAIL+1))
+    }
+fi
+
+# Build test_libmach by linking the libmach source directly. This avoids
+# needing a shared library install for smoke iteration; the actual .so
+# is produced by `make -C $LIBMACH_DIR` for shipping.
+if [ ! -x "$TEST_LIBMACH_BIN" ] || \
+   [ "$TEST_LIBMACH_SRC" -nt "$TEST_LIBMACH_BIN" ] || \
+   [ "$LIBMACH_DIR/mach_traps.c" -nt "$TEST_LIBMACH_BIN" ]; then
+    cc -O2 -I"$LIBMACH_DIR/include" \
+        "$LIBMACH_DIR/mach_traps.c" "$TEST_LIBMACH_SRC" \
+        -o "$TEST_LIBMACH_BIN" || {
+        echo "FAIL build test_libmach"
         FAIL=$((FAIL+1))
     }
 fi
@@ -64,6 +83,27 @@ invoke_syscall mach_reply_port
 invoke_syscall task_self_trap
 invoke_syscall thread_self_trap
 invoke_syscall host_self_trap
+
+# libmach userland shim: same syscalls, called by name through libmach
+# instead of by raw syscall number. Validates that:
+#   - sysctlbyname() resolves the syscall numbers at runtime
+#   - the cached static works
+#   - each entry point invokes the right syscall
+# A return of 0 (MACH_PORT_NULL) is the documented behavior for
+# pre-mach.ko processes; the goal here is "no crash, output reasonable."
+if [ -x "$TEST_LIBMACH_BIN" ]; then
+    OUTPUT=$("$TEST_LIBMACH_BIN" 2>&1)
+    if [ $? -eq 0 ] && echo "$OUTPUT" | grep -q "mach_reply_port"; then
+        echo "PASS libmach_trap_family:"
+        echo "$OUTPUT" | sed 's/^/    /'
+        PASS=$((PASS+1))
+    else
+        echo "FAIL libmach_trap_family: $OUTPUT"
+        FAIL=$((FAIL+1))
+    fi
+else
+    echo "SKIP libmach_trap_family: binary missing"
+fi
 
 echo
 echo "=== SMOKE TOTAL: $PASS pass, $FAIL fail ==="
