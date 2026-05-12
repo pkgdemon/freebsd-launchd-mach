@@ -1,22 +1,10 @@
 # One pkg per line; lines starting with # are ignored.
 # Runtime packages — installed in the chroot and shipped in the ISO.
-
-# ---- gershwin/GNUstep runtime deps ----
-
-# libs-base configure: GSXML / NSXMLNode / NSPropertyListSerialization
-# XML branch. libgnustep-base.so links against libxml2.so at runtime.
-libxml2
-
-# libs-base configure: NSLocale / NSString unicode handling.
-# libgnustep-base.so links against libicui18n.so + libicuuc.so at runtime.
-icu
-
-# Runtime dep surfaced at boot: ld-elf.so.1 fails to load
-# libgnustep-base.so because of "Shared object libffi.so.8 not found".
-# libffi gets pulled in as a transitive of cmake/ninja at build time but
-# removed by `pkg autoremove` after the buildpkgs purge. Pin it
-# explicitly here so it stays on the ISO.
-libffi
+#
+# Note: gershwin/GNUstep runtime deps (libxml2, icu, libffi) were removed
+# alongside the gershwin chroot build on 2026-05-12. Restore here when
+# libdispatch + GNUstep are brought back. See memory
+# freebsd_launchd_mach_gershwin_removed.
 
 # ---- firmware blobs ----
 
