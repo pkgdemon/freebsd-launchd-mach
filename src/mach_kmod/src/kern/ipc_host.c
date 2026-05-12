@@ -603,6 +603,16 @@ ipc_host_sysinit(void *arg __unused)
 	ipc_host_init();
 }
 
-/* before SI_SUB_INTRINSIC and after SI_SUB_KLD where zones are initialized */
-SYSINIT(ipc_host, SI_SUB_CPU, SI_ORDER_ANY, ipc_host_sysinit, NULL);
+/*
+ * Out-of-tree fix: bumped from SI_SUB_CPU to SI_SUB_INTRINSIC.
+ *
+ * ipc_host_init() allocates 3 kernel ports via ipc_port_alloc_kernel()
+ * which uma_zalloc()s from the IPC zones set up by ipc_bootstrap_sysinit
+ * (the SYSINIT in ipc/ipc_init.c, at SI_SUB_KLD/SI_ORDER_ANY). On
+ * ravynOS the zones come up via kernel proper init; in our out-of-tree
+ * kmod load they come up from ipc_bootstrap_sysinit at SI_SUB_KLD.
+ * SI_SUB_CPU runs BEFORE SI_SUB_KLD, so the zone alloc panics.
+ * SI_SUB_INTRINSIC runs after SI_SUB_KLD, after the zones are ready.
+ */
+SYSINIT(ipc_host, SI_SUB_INTRINSIC, SI_ORDER_ANY, ipc_host_sysinit, NULL);
 

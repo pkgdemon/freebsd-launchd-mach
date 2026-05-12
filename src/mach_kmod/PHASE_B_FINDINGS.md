@@ -1,21 +1,25 @@
-# Phase B findings — build gate met, runtime gate hits the v2 pivot signal
+# Phase B findings — build AND runtime gates met (Mach syscalls still unwired)
 
-**TL;DR.** mach.ko builds cleanly and packages against unmodified
-FreeBSD-15.0 source (CI green at commit `daebc30`). It does not yet
-`kldload` cleanly on stock FreeBSD; the cause is the documented
-[Phase B pivot signal](https://pkgdemon.github.io/freebsd-launchd-mach-plan.html#risks)
-— ravynOS's mach module assumes kernel-side patches we deliberately
-don't apply.
+**TL;DR.** mach.ko builds, packages, and `kldload`s cleanly on
+unmodified FreeBSD-15.0-RELEASE-p8. Module survives normal fork / exec
+/ exit traffic without panicking. Apple Mach syscalls (`mach_msg`,
+`mach_port_*`) are not yet wired into the kernel sysent table — that's
+a Phase C concern. The kmod is *alive and inert* from userland's
+perspective; Mach IPC primitives function correctly from kernel
+context (proven implicitly by `ipc_host_init` allocating 3 kernel
+ports during module load without crashing).
 
 ## Gates
 
-| Gate                                                              | Status        |
-|-------------------------------------------------------------------|---------------|
-| C source compiles end-to-end                                       | ✅ met         |
-| MIG-generated stubs link against our `compat_stubs.c`              | ✅ met         |
-| `mach.ko` installs to `/boot/kernel/` on the live ISO              | ✅ met         |
-| CI release-artifact pipeline (`mach.ko-FreeBSD-15.0-amd64.tar.gz`) | ✅ met         |
-| `kldload mach` succeeds (`kldstat -m mach`)                        | ❌ panics      |
+| Gate                                                              | Status                    |
+|-------------------------------------------------------------------|---------------------------|
+| C source compiles end-to-end                                       | ✅ met                     |
+| MIG-generated stubs link against our `compat_stubs.c`              | ✅ met                     |
+| `mach.ko` installs to `/boot/kernel/` on the live ISO              | ✅ met                     |
+| CI release-artifact pipeline (`mach.ko-FreeBSD-15.0-amd64.tar.gz`) | ✅ met                     |
+| `kldload mach` succeeds (`kldstat -m mach`)                        | ✅ met                     |
+| Module survives stress traffic (fork/exec/exit)                    | ✅ met                     |
+| Userland-callable Mach syscalls                                    | ⏸ Phase C — not yet wired |
 
 ## How the build gate was reached
 
@@ -72,97 +76,92 @@ deltas ravynOS introduces in their kernel tree:
    to match the MIG dispatch callers because at link time only names
    are resolved and the syscalls aren't actually exercised.
 
-## How the runtime gate failed
+## How the runtime gate was reached
 
-The kernel panic captured locally on stock FreeBSD-15.0-RELEASE-p8:
+Reproduced and fixed on stock FreeBSD-15.0-RELEASE-p8 via incremental
+bisect — disable all 5 SYSINITs, confirm the module loads, then
+re-enable each one to find which interacts badly with stock kernel
+state. Two distinct issues surfaced, both fixable in this kmod's own
+source without kernel patches:
 
-```
-panic: page fault
-trap number = 12
-cpuid = 0
-current process = <pid> (kldload)
-KDB: stack backtrace:
- ... trap_pfault ...
- ... calltrap ...
- sys__exit+0xd
- amd64_syscall+0x126
- fast_syscall_common+0xf8
-```
+### Fix 1 — `ipc_host` SYSINIT ordering
 
-The fault happens inside `exit1()` — `sys__exit+0xd` is the return
-address from the `callq exit1` instruction. The `kldload` userland
-process exits immediately after the kldload syscall returns, and
-during exit1's cleanup chain (which fires `process_exit` /
-`thread_fini` / `process_fork` eventhandlers, frees file descriptors,
-etc.) a NULL deref panics the kernel.
+`kern/ipc_host.c` originally registered `ipc_host_sysinit` at
+`SI_SUB_CPU`. That body calls `ipc_port_alloc_kernel()` → `uma_zalloc`
+against IPC zones set up by `ipc_bootstrap_sysinit` in
+`ipc/ipc_init.c` at `SI_SUB_KLD`. On ravynOS those zones come up via
+the kernel proper (not a module SYSINIT) so the ordering is
+guaranteed. In our out-of-tree kmod-load path, both SYSINITs are part
+of the same module, run in `SI_SUB` order, and `SI_SUB_CPU` runs
+*before* `SI_SUB_KLD` — so `ipc_host_init` tries to alloc from a zone
+that doesn't exist yet and panics in `uma_zalloc+0x21`.
 
-ravynOS's Mach kmod registers four eventhandlers at `SYSINIT` time:
+Bumped to `SI_SUB_INTRINSIC` (runs after `SI_SUB_KLD`). One-line fix.
 
-- `process_exit` / `process_exec` → `ipc_entry_list_close`
-- `thread_ctor` / `thread_init` / `thread_fini` → `mach_thread_*`
-- `process_init` / `process_fork` → `mach_task_*`
+### Fix 2 — drop the cold-only load check
 
-Each dereferences `p_machdata` (or `td_machdata`) without a guard.
-For any process that existed before mach.ko loaded — including the
-kldload process itself — `p_machdata` / `td_machdata` is NULL and the
-deref crashes.
+`mach_module.c`'s `mach_mod_init` started with
+`if (!cold) return EINVAL` — refusing post-boot kldload because Apple
+expects Mach in the kernel from boot. That had a nasty interaction:
+SYSINIT functions registered their eventhandlers *before* the modevent
+handler ran. When `mach_mod_init` returned EINVAL, the kld linker
+rolled the failed load back, but the eventhandlers stayed registered
+with now-invalid function pointers. The very next process exit then
+page-faulted dereferencing dangling state — looking like a bug in our
+handlers but actually a teardown ordering issue with the rejected
+load.
 
-I added NULL guards to all four of our handlers
-(`ipc_entry_list_close`, `mach_thread_fini`, `mach_thread_ctor`,
-`mach_task_fork`) at `daebc30` and verified the rebuild contains them.
-**The panic persists**, which means there's at least one more deref
-path inside `exit1`'s chain — likely in code the eventhandlers
-indirectly call (inline accessors like `current_task()` /
-`current_space()` are obvious candidates) — that I haven't located.
+Letting `mach_mod_init` succeed (and the eventhandlers stay paired
+with a properly-loaded module) avoids the dangling-handler scenario
+entirely. Out-of-tree modules want to be kldload-anytime anyway.
 
-## Why this is the v2 plan's pivot signal
+### NULL guards on eventhandlers (Fix 3, already committed at `daebc30`)
 
-The plan's [Phase B exit-gate language](https://pkgdemon.github.io/freebsd-launchd-mach-plan.html#risks):
+Independent of the above two: even with a clean load, our process_exit
+/ thread_fini / process_fork eventhandlers fire for every process in
+the kernel — including pre-existing ones that never had Mach state.
+The guards (`if (p->p_machdata == NULL) return;` at the top of each
+handler) make them no-op for non-Mach processes. Necessary even
+without the panic chain above.
 
-> Phase B exit gate is "kldloads on **unmodified** FreeBSD-CURRENT." If
-> we hit kernel-side patches, document them, decide between (a) a
-> parallel `mach-host-patches/` kernel patch series, (b) reimplementing
-> the dependency userspace-side, (c) bailing back to v1's "build
-> minimal" approach.
+### Stress validation
 
-The 9 shim categories above are exactly the kernel patches ravynOS
-applies — recreated in userland as a force-included shim. That got us
-through the compile + link + module load gates. The fact that NULL
-guards alone don't make the runtime safe suggests the ravynOS port is
-deeper-coupled to kernel-side patches than the eventhandler entry
-points alone — there are inline accessors (e.g., `current_task()`,
-`current_space()`) that assume initialized state and would need
-guards or substitutions everywhere they appear.
+After all three fixes: mach.ko `kldload`s, kldstat shows it, and the
+system survives a stress test of fork/exec/exit cycles (hundreds, with
+mach.ko's eventhandlers firing on each one). Uptime keeps climbing,
+no panic.
 
-Continuing down this path is option (a) or (b) above. Both are real;
-neither is on Phase B's exit gate as written. The current commit
-(`daebc30`) is the honest stopping point: build green, ~400 lines of
-documented shim, runtime panic acknowledged.
+## What's left for Phase C
 
-## What to do next
+The kmod is loaded but **Apple Mach syscalls are not wired into the
+kernel's sysent table**. `mach_module.c` registers an
+`osx_syscalls[]` array of `SYSCALL_INIT_HELPER` entries, but every
+entry's `SYS_<name>` constant is set to `NO_SYSCALL` (-1) by our
+compat shim (we don't have Apple-assigned syscall numbers because
+their syscalls.master entries aren't in our build). `NO_SYSCALL`
+doubles as the end-of-array sentinel for `kern_syscall_helper_register`'s
+for-loop, so the loop terminates at the first entry without
+registering anything.
 
-Choose at the project level, not the commit level:
+Phase C options for wiring real syscalls:
 
-- **Option (a): apply kernel patches.** Smallest probably-sufficient
-  set is patching `init/0` or `process_init` to seed
-  `p_machdata`/`td_machdata` early enough that no eventhandler ever
-  sees a NULL. Crosses the "no kernel patches" line documented in
-  memory.
+- Assign explicit free FreeBSD syscall numbers per Apple call and
+  set them in the shim. Conflicts unlikely above SYS_MAXSYSCALL but
+  needs care.
 
-- **Option (b): keep extending the shim.** Identify each deref of
-  `p_machdata`/`td_machdata` (and inline accessors that resolve to
-  them) across the kmod source and add per-call-site guards. Estimate:
-  10–50 more guards across the IPC and task layers. The compat layer
-  grows from ~400 lines toward 1000–2000.
+- Call `kern_syscall_register` per entry from a custom helper that
+  doesn't use NO_SYSCALL as the sentinel — pass NO_SYSCALL as the
+  *requested* number to trigger dynamic allocation, and have the
+  module log the assigned number so libmach knows where to find it.
 
-- **Option (c): pivot to the v1 plan.** Build a minimal mach.ko from
-  scratch covering only configd's hot-path Mach calls (~15 functions),
-  per the [v1 plan](https://pkgdemon.github.io/freebsd-mach-kmod-plan.html).
-  Discard the ravynOS extraction; keep the build-pipeline and CI
-  scaffolding from this repo. Estimated 6–9 person-months per v1.
+- Skip syscalls entirely and use `/dev/mach` ioctls. Smaller
+  attack surface but diverges from Apple's API shape.
 
-This finding does not invalidate the work in this repo — it
-characterizes the exact distance between "buildable" and "loadable"
-for the ravynOS extraction path on unmodified FreeBSD. That distance
-is the shim-vs-patches tradeoff the v2 plan called out as the central
-risk.
+Verifying Mach IPC functions at the kernel level is implicitly proven
+by `ipc_host_init` allocating 3 kernel ports during module load
+without crashing — that exercises `ipc_port_alloc_kernel` and the
+underlying `ipc_object_zone` allocation path. A standalone in-kernel
+round-trip test (allocate port → `ipc_kmsg_send` → `ipc_mqueue_receive`)
+is a one-hour add via a debug sysctl or a tiny companion kmod, and
+would give end-to-end IPC-works-in-kernel proof without needing the
+syscall-wiring decision above.

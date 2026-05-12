@@ -104,10 +104,22 @@ mach_mod_init(void)
 {
 	int err;
 
-	if (!cold) {
-		printf("mach services can only be loaded at boot time\n");
-		return (EINVAL);
-	}
+	/*
+	 * Out-of-tree fix: the original code rejected post-boot kldload
+	 * (`if (!cold) return EINVAL`) because ravynOS expects Mach to be
+	 * compiled into the kernel and brought up during boot. Our use
+	 * case is the opposite — an explicitly-loadable kernel module —
+	 * so allow loading at any time.
+	 *
+	 * Importantly, this also closes a panic path discovered during
+	 * Phase B local testing: when mach_mod_init returned EINVAL after
+	 * the SYSINIT functions had already registered eventhandlers,
+	 * those handlers stayed live in the kernel after the linker rolled
+	 * the failed load back, and the next process exit page-faulted
+	 * dereferencing uninitialized Mach state. Letting mach_mod_init
+	 * succeed (and the eventhandlers stay paired with a properly-
+	 * loaded module) avoids the dangling-handler scenario entirely.
+	 */
 
 	if ((err = syscall_helper_register(osx_syscalls, SY_THR_STATIC_KLD))) {
 		printf("failed to register osx calls: %d\n", err);
