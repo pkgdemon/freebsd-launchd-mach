@@ -85,6 +85,10 @@ SRCS+=	mach_test.c
 # sys_mach_reply_port.
 SRCS+=	mach_syscall_wire.c
 
+# Out-of-tree read-only stats counters: mach.stats.ports_in_use and
+# mach.stats.kmsgs_in_use. Phase B / Tier 1 task C.
+SRCS+=	mach_stats.c
+
 # Include paths:
 #   include/apple/  — Apple-ism headers (proc_info.h, kern_event.h, ...)
 #   include/       — top-level so '#include <sys/mach/...>' resolves to
