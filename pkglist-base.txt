@@ -79,7 +79,12 @@ FreeBSD-xz
 FreeBSD-bzip2
 
 # ---- pam / login ----
+# FreeBSD-pam-lib is just libpam.so. FreeBSD-pam is the modular auth
+# facility — ships /usr/lib/pam/pam_*.so (modules) and /etc/pam.d/*
+# (service configs). Without it, pam_start() fails with PAM_SYSTEM_ERR
+# ("System error") and login(1) wedges before prompting for password.
 FreeBSD-pam-lib
+FreeBSD-pam
 
 # ---- transitive runtime libs (pinned so they don't get autoremoved) ----
 # libBlocksRuntime: per FreeBSD 15 base ships Block.h + libBlocksRuntime
