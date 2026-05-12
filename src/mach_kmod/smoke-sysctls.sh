@@ -55,6 +55,7 @@ check sysctl_thread_self_trap_no     sysctl mach.syscall.thread_self_trap
 check sysctl_host_self_trap_no       sysctl mach.syscall.host_self_trap
 check sysctl_stats_ports_in_use      sysctl mach.stats.ports_in_use
 check sysctl_stats_kmsgs_in_use      sysctl mach.stats.kmsgs_in_use
+check sysctl_test_in_kernel_mqueue   sysctl mach.test_in_kernel_mqueue
 
 # Wired syscalls. Each is invoked from a process that may or may not have
 # Mach state; the NULL-guard wrapper means a 0 return is a valid PASS
