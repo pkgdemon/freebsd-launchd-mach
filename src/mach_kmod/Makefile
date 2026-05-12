@@ -70,6 +70,12 @@ SRCS+=	ipc_tt.c ipc_host.c task.c thread_pool.c
 # compat/mach/ port. See src/compat_stubs.c for rationale.
 SRCS+=	compat_stubs.c
 
+# Out-of-tree in-kernel Mach IPC round-trip test. Exposes
+# `sysctl mach.test_roundtrip` which exercises ipc_port_alloc_special
+# + ipc_kmsg_send + ipc_mqueue_receive end-to-end in kernel context.
+# Phase B / Tier 1 task A. Drop this line to ship without the tester.
+SRCS+=	mach_test.c
+
 # Include paths:
 #   include/apple/  — Apple-ism headers (proc_info.h, kern_event.h, ...)
 #   include/       — top-level so '#include <sys/mach/...>' resolves to
