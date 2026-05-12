@@ -76,6 +76,15 @@ SRCS+=	compat_stubs.c
 # Phase B / Tier 1 task A. Drop this line to ship without the tester.
 SRCS+=	mach_test.c
 
+# Out-of-tree syscall wiring. ravynOS's mach_module.c uses
+# syscall_helper_register on an array whose first entry has
+# SYS_<name>=NO_SYSCALL, which is also the helper's end-of-array
+# sentinel — so the loop exits immediately and no syscalls register.
+# This file calls syscall_register directly per Mach syscall to
+# work around that. Phase B / Tier 1 task B starts with just
+# sys_mach_reply_port.
+SRCS+=	mach_syscall_wire.c
+
 # Include paths:
 #   include/apple/  — Apple-ism headers (proc_info.h, kern_event.h, ...)
 #   include/       — top-level so '#include <sys/mach/...>' resolves to

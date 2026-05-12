@@ -1115,12 +1115,31 @@ mach_task_fork(void *arg __unused, struct proc *p1, struct proc *p2, int flags _
 	task_t task;
 	task_t parent_task;
 
-	/* Out-of-tree fix: same as the other event handlers — only run
-	 * for Mach-aware processes. */
+	/*
+	 * Out-of-tree fix: we still need to initialize the child task
+	 * even when the parent has no Mach state (the parent existed
+	 * before mach.ko loaded — common for any process descended from
+	 * pre-load init/sshd). Without this initialization, the child's
+	 * p_machdata points at a zero-filled task struct (allocated by
+	 * mach_task_init's process_init handler) and any subsequent
+	 * deref of task->itk_space NULL-faults.
+	 *
+	 * - If the child has no task (shouldn't happen post-mach.ko, but
+	 *   defensive): early-return.
+	 * - If parent has no Mach state: initialize child with TASK_NULL
+	 *   parent. task_init_internal handles NULL parent_task by
+	 *   skipping the inheritance step.
+	 * - Otherwise: full parent-derived init.
+	 */
 	task = p2->p_machdata;
-	parent_task = p1->p_machdata;
-	if (task == NULL || parent_task == NULL)
+	if (task == NULL)
 		return;
+
+	parent_task = p1->p_machdata;
+	if (parent_task == NULL) {
+		task_init_internal(TASK_NULL, task);
+		return;
+	}
 
 	atomic_add_long(&task_uniqueid, 1);
 	task->itk_uniqueid = task_uniqueid;
