@@ -1,0 +1,29 @@
+# One pkg per line; lines starting with # are ignored.
+# Build-only FreeBSD-* pkgbase packages — needed inside the chroot to
+# compile the gershwin system-domain libraries (libdispatch + GNUstep
+# stack), then purged before the slim/mkuzip pass so they don't ship
+# in the ISO. Mirrors the buildpkgs.txt purge pattern but for pkgbase
+# pkgs that base.txz used to drag in unconditionally.
+#
+# Installed alongside pkglist-base.txt in the same host-side
+#   pkg -R $WORK/pkg-config -r $WORK/rootfs install -y ...
+# call.
+
+# clang/lld for cmake -DCMAKE_C_COMPILER=clang in the GNUstep chroot build.
+FreeBSD-clang
+FreeBSD-lld
+
+# Base toolchain — make(1), ar, ranlib, etc.
+FreeBSD-toolchain
+
+# Headers. cmake/configure inside the chroot need /usr/include/* to
+# compile libobjc2, libs-base, libs-corebase. clang itself needs its
+# own headers (clang-dev).
+FreeBSD-clang-dev
+FreeBSD-runtime-dev
+FreeBSD-clibs-dev
+FreeBSD-libcompiler_rt-dev
+FreeBSD-libcompat-dev
+FreeBSD-libexecinfo-dev
+FreeBSD-pam-dev
+FreeBSD-openssl-dev

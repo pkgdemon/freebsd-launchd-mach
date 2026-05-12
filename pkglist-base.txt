@@ -1,0 +1,97 @@
+# One pkg per line; lines starting with # are ignored.
+# Curated FreeBSD-* pkgbase packages — runtime portion. Replaces the
+# wholesale base.txz + kernel.txz extraction with an install of only what
+# this ISO actually needs at boot/runtime. Installed host-side via
+#   pkg -R $WORK/pkg-config -r $WORK/rootfs install -y ...
+# against pkg.freebsd.org/FreeBSD:${FREEBSD_VERSION}:${ARCH}/base_latest.
+#
+# Build-only base pkgs (clang, lld, *-dev) live in buildpkgs-base.txt and
+# are purged before mkuzip, same pattern as buildpkgs.txt today.
+#
+# Explicitly omitted (vs. base.txz contents): kerberos, lldb, dtrace,
+# audit, bluetooth, hyperv-tools, mlx-tools, cxgbe-tools, nuageinit,
+# bsdinstall, bsdconfig, yp, ppp, ftp, ipf, ipfw, pf, blocklist, lib9p,
+# quotacheck, hast, ggate, natd, bsnmp, autofs, at, apm, acct, ee, dma,
+# inetd, hostapd, kernel-man, mandoc, periodic, local-unbound, netmap,
+# newsyslog, nfs, nvme-tools, rdma, rcmds, sound, tcpd, zfs, locales,
+# libldns, libdwarf, libevent1, librpcsec_gss, libipt, libcuse, libvgl,
+# libvmmapi, libbegemot, libbsdstat, libpathconv, librss, fwget, ctf,
+# ccdconfig, freebsd-cert, efi-tools — these are the ISO-size savings.
+
+# ---- bootloader + kernel ----
+FreeBSD-bootloader
+FreeBSD-kernel-generic
+
+# ---- /sbin/init + boot ----
+# rescue: /init.sh shebangs /rescue/sh and uses /rescue/{mount,mdconfig,
+#   chroot,kldload,init} pre-pivot.
+# runtime: /sbin/init, /sbin/halt, /sbin/reboot, basic boot scripts.
+# rc: /etc/rc* — stock /sbin/init runs these at multi-user.
+FreeBSD-rescue
+FreeBSD-runtime
+FreeBSD-rc
+
+# ---- core libc + base userland ----
+FreeBSD-clibs
+FreeBSD-utilities
+FreeBSD-csh
+FreeBSD-vi
+
+# Stock /sbin/init runs rc which expects devd to handle hardware events.
+# Will be droppable once Phase D replaces /sbin/init with launchd.
+FreeBSD-devd
+FreeBSD-devmatch
+
+# Console keymap data (loaded by vt(4)).
+FreeBSD-vt-data
+
+# ---- filesystems ----
+# UFS userland (mount_ufs, fsck_ffs, newfs) — /init.sh mounts the uzip
+# as ufs ro at /sysroot.
+FreeBSD-ufs
+
+# geom: gpart/glabel/etc. for any post-boot partitioning the user does.
+FreeBSD-geom
+FreeBSD-mtree
+
+# ---- network ----
+FreeBSD-ssh
+FreeBSD-resolvconf
+FreeBSD-syslogd
+
+# ---- pkg + fetch (chroot still installs ports pkglist.txt + buildpkgs.txt
+#      via in-chroot `pkg bootstrap`; it needs pkg-bootstrap and fetch).
+FreeBSD-pkg-bootstrap
+FreeBSD-fetch
+FreeBSD-libsqlite3
+FreeBSD-libucl
+FreeBSD-libarchive
+
+# ---- TLS / certs (sshd, pkg, dhcpcd) ----
+FreeBSD-openssl
+FreeBSD-openssl-lib
+FreeBSD-caroot
+FreeBSD-certctl
+
+# ---- compression ----
+FreeBSD-zlib
+FreeBSD-xz
+FreeBSD-bzip2
+
+# ---- pam / login ----
+FreeBSD-pam-lib
+
+# ---- transitive runtime libs (pinned so they don't get autoremoved) ----
+# libBlocksRuntime: per FreeBSD 15 base ships Block.h + libBlocksRuntime
+#   (memory: freebsd_blocksruntime_in_base) — gershwin's libdispatch
+#   defers to base for it.
+FreeBSD-libblocksruntime
+FreeBSD-libcasper
+FreeBSD-libthread_db
+FreeBSD-libcompiler_rt
+FreeBSD-libexecinfo
+FreeBSD-libmagic
+
+# ---- locale / timezone ----
+# zoneinfo: many libs misbehave without /usr/share/zoneinfo/UTC.
+FreeBSD-zoneinfo

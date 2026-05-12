@@ -10,6 +10,10 @@
 # gershwin/GNUstep system-domain libraries (libdispatch, libobjc2,
 # libs-base, libs-corebase) pre-installed under /System/Library/. No Mach
 # kernel module yet, no launchd, no configd. Phase B adds mach.ko.
+#
+# Base + kernel come from pkgbase (pkg.freebsd.org/${PKG_ABI}/base_latest)
+# via a curated install — no full base.txz/kernel.txz extraction. Lets us
+# omit kerberos/lldb/dtrace/audit/etc. that base.txz had no opt-out for.
 
 set -eu
 
@@ -18,11 +22,17 @@ set -eu
 : "${LABEL:=LIVECD}"
 ARCH=${ARCH:-amd64}
 
+# pkgbase ABI: pkg.freebsd.org organizes repos under FreeBSD:<major>:<arch>.
+# Strip any minor version (15.0 -> 15) so the URL resolves.
+PKG_MAJOR=${FREEBSD_VERSION%%.*}
+PKG_ABI="FreeBSD:${PKG_MAJOR}:${ARCH}"
+
 ROOT=$(cd "$(dirname "$0")" && pwd)
 WORK=$ROOT/work
 OUT=$ROOT/out
 DIST=$ROOT/distfiles
 REPOS=$ROOT/repos
+PKG_CONFIG=$WORK/pkg-config
 
 MIRROR="https://download.freebsd.org/ftp/releases/${ARCH}/${FREEBSD_VERSION}-RELEASE"
 
@@ -62,34 +72,73 @@ for repo in $UPSTREAMS; do
 done
 
 #
-# 1. fetch base.txz + kernel.txz + src.txz
+# 1. fetch src.txz.
 #
-# src.txz gives us /usr/src/release/amd64/mkisoimages.sh — the FreeBSD
-# release engineering script that builds the hybrid (BIOS + UEFI El
-# Torito + GPT-overlaid for USB-stick dd) cd9660.
+# Base/kernel come from pkgbase (pkg.freebsd.org/${PKG_ABI}/base_latest)
+# at step 2 — no more base.txz / kernel.txz.
 #
-for f in base.txz kernel.txz src.txz; do
-    if [ ! -f "$DIST/$f" ]; then
-        echo "==> downloading $f"
-        fetch -o "$DIST/$f" "$MIRROR/$f"
-    fi
-done
+# src.txz is still fetched on the host for two consumers:
+#   - kernel sources for the mach.ko out-of-tree build (3b)
+#   - mkisoimages.sh release script at step 11
+# Neither lives inside the chroot.
+#
+if [ ! -f "$DIST/src.txz" ]; then
+    echo "==> downloading src.txz"
+    fetch -o "$DIST/src.txz" "$MIRROR/src.txz"
+fi
 
 #
-# 2. extract into rootfs staging dir
+# 2. install curated pkgbase set into rootfs staging dir.
 #
-echo "==> extracting base+kernel"
-mkdir -p "$WORK/rootfs"
-tar -xJf "$DIST/base.txz"   -C "$WORK/rootfs"
-tar -xJf "$DIST/kernel.txz" -C "$WORK/rootfs"
+# Replaces the wholesale `tar -xJf base.txz + kernel.txz` with a
+# host-driven `pkg -R config -r rootfs install -y ...` against
+# pkg.freebsd.org/${PKG_ABI}/base_latest. The package list is hand
+# curated (pkglist-base.txt for runtime; buildpkgs-base.txt for build-
+# only FreeBSD-* like clang/lld/-dev, purged before mkuzip alongside
+# buildpkgs.txt so build tooling never ships in the ISO).
+#
+# ABI/OSVERSION/IGNORE_OSVERSION env let us install a ${PKG_ABI} target
+# from a host pkg of any version. Same trick gershwin-on-freebsd uses.
+#
+# Note: cap_mkdb / pwd_mkdb are no longer needed here — the FreeBSD-rc
+# / FreeBSD-runtime pkg post-install scripts rebuild login.conf.db and
+# pwd.db / spwd.db automatically.
+#
+echo "==> writing pkgbase repo config (${PKG_ABI}, base_latest)"
+mkdir -p "$PKG_CONFIG" "$WORK/rootfs"
+cat > "$PKG_CONFIG/FreeBSD-base.conf" <<EOF
+FreeBSD-base: {
+  url: "https://pkg.freebsd.org/${PKG_ABI}/base_latest",
+  enabled: yes
+}
+EOF
 
-# Rebuild login + passwd .db files (bsdinstall would normally do this).
-cap_mkdb "$WORK/rootfs/etc/login.conf"
-pwd_mkdb -p -d "$WORK/rootfs/etc" "$WORK/rootfs/etc/master.passwd"
+BASE_PKGS=$(     grep -v '^[[:space:]]*#' "$ROOT/pkglist-base.txt"   2>/dev/null | grep -v '^[[:space:]]*$' || true)
+BASE_BUILD_PKGS=$(grep -v '^[[:space:]]*#' "$ROOT/buildpkgs-base.txt" 2>/dev/null | grep -v '^[[:space:]]*$' || true)
+
+if [ -z "$BASE_PKGS" ]; then
+    echo "ERROR: pkglist-base.txt is empty; refusing to build empty rootfs" >&2
+    exit 1
+fi
+
+# Single combined install — runtime + build-only — so the dep solver
+# resolves once. buildpkgs-base.txt entries get pkg deleted at the end of
+# step 3 alongside buildpkgs.txt.
+echo "==> installing pkgbase runtime + build pkgs into $WORK/rootfs"
+echo "$BASE_PKGS" | sed 's/^/    runtime  /'
+echo "$BASE_BUILD_PKGS" | sed 's/^/    build    /'
+# shellcheck disable=SC2086
+env ABI="${PKG_ABI}" \
+    OSVERSION="${PKG_MAJOR}00000" \
+    IGNORE_OSVERSION=yes \
+    ASSUME_ALWAYS_YES=yes \
+    pkg -R "$PKG_CONFIG" -r "$WORK/rootfs" install -y -r FreeBSD-base \
+        $BASE_PKGS $BASE_BUILD_PKGS
 
 #
 # 3. chroot: runtime pkgs (pkglist.txt) + build pkgs (buildpkgs.txt) +
-#    system-domain build (libdispatch + GNUstep stack) + buildpkgs purge.
+#    system-domain build (libdispatch + GNUstep stack) + buildpkgs purge
+#    (both ports buildpkgs.txt AND pkgbase buildpkgs-base.txt).
 #    Single chroot session for all of it; build pkgs go in and out before
 #    the slim pass so they don't ship in the ISO.
 #
@@ -243,10 +292,18 @@ CHROOT_BUILD
             > "$WORK/rootfs/usr/local/libdata/ldconfig/freebsd-launchd-mach"
         chroot "$WORK/rootfs" ldconfig -m /usr/local/lib /System/Library/Libraries
 
-        echo "==> purging build packages"
+        echo "==> purging build packages (ports + pkgbase build-only)"
         # shellcheck disable=SC2086
         chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
             pkg delete -y $BUILD_PKGS
+        # buildpkgs-base.txt: pkgbase build-only set installed in step 2
+        # alongside pkglist-base.txt. Same purge semantics — gone before
+        # mkuzip so they don't ship in the ISO.
+        if [ -n "$BASE_BUILD_PKGS" ]; then
+            # shellcheck disable=SC2086
+            chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
+                pkg delete -y $BASE_BUILD_PKGS
+        fi
         chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
             pkg autoremove -y || true
     fi
