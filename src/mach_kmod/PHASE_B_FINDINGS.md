@@ -1,25 +1,33 @@
-# Phase B findings — build AND runtime gates met (Mach syscalls still unwired)
+# Phase B findings — build, runtime, AND userland-callability gates met
 
-**TL;DR.** mach.ko builds, packages, and `kldload`s cleanly on
-unmodified FreeBSD-15.0-RELEASE-p8. Module survives normal fork / exec
-/ exit traffic without panicking. Apple Mach syscalls (`mach_msg`,
-`mach_port_*`) are not yet wired into the kernel sysent table — that's
-a Phase C concern. The kmod is *alive and inert* from userland's
-perspective; Mach IPC primitives function correctly from kernel
-context (proven implicitly by `ipc_host_init` allocating 3 kernel
-ports during module load without crashing).
+**TL;DR.** mach.ko builds, packages, `kldload`s cleanly on unmodified
+FreeBSD-15.0-RELEASE-p8, and exposes a working surface from userland:
+**4 wired Mach syscalls** (mach_reply_port, task_self_trap,
+thread_self_trap, host_self_trap), **2 live stats sysctls**
+(mach.stats.ports_in_use, mach.stats.kmsgs_in_use), and **2 in-kernel
+test sysctls** (mach.test_port_lifecycle, mach.test_in_kernel_mqueue).
+Module survives normal fork/exec/exit traffic. A 16-check smoke
+harness (`smoke-sysctls.sh`) at the repo root validates every sysctl
+read/write path plus all 4 wired syscalls end-to-end. Phase C is the
+**userland libmach + lazy Mach init** to make every process able to
+hold real Mach state and do real IPC.
 
 ## Gates
 
-| Gate                                                              | Status                    |
-|-------------------------------------------------------------------|---------------------------|
-| C source compiles end-to-end                                       | ✅ met                     |
-| MIG-generated stubs link against our `compat_stubs.c`              | ✅ met                     |
-| `mach.ko` installs to `/boot/kernel/` on the live ISO              | ✅ met                     |
-| CI release-artifact pipeline (`mach.ko-FreeBSD-15.0-amd64.tar.gz`) | ✅ met                     |
-| `kldload mach` succeeds (`kldstat -m mach`)                        | ✅ met                     |
-| Module survives stress traffic (fork/exec/exit)                    | ✅ met                     |
-| Userland-callable Mach syscalls                                    | ⏸ Phase C — not yet wired |
+| Gate                                                              | Status |
+|-------------------------------------------------------------------|--------|
+| C source compiles end-to-end                                       | ✅ met |
+| MIG-generated stubs link against our `compat_stubs.c`              | ✅ met |
+| `mach.ko` installs to `/boot/kernel/` on the live ISO              | ✅ met |
+| CI release-artifact pipeline (`mach.ko-FreeBSD-15.0-amd64.tar.gz`) | ✅ met |
+| `kldload mach` succeeds (`kldstat -m mach`)                        | ✅ met |
+| Module survives stress traffic (fork/exec/exit)                    | ✅ met |
+| Userland-callable Mach syscalls (trap family)                      | ✅ met |
+| Live stats sysctls (ports_in_use, kmsgs_in_use)                    | ✅ met |
+| In-kernel mqueue primitive validation                              | ✅ met |
+| Per-process Mach state for pre-load processes                      | ⏸ Phase C — wrapper returns MACH_PORT_NULL for those callers |
+| Apple Mach syscalls beyond the trap family                         | ⏸ Phase C — same pattern, more entries |
+| Userland libmach / launchd / libxpc                                | ⏸ Phase C+ |
 
 ## How the build gate was reached
 
@@ -200,37 +208,118 @@ Not a "we hit an architectural wall" problem.
 zero kernel modifications.** That last clause is the part neither
 ravynOS nor NextBSD attempted.
 
+## Tier 1 — wired syscalls, stats, in-kernel IPC test (2026-05-11)
+
+Once the build and runtime gates were met, Tier 1 added the userland
+contact surface and observability needed before Phase C work can be
+planned coherently. Four landings, each one commit on `main`:
+
+### A. mach.test_port_lifecycle — port alloc/dealloc stress
+
+A `sysctl mach.test_port_lifecycle` that allocates N kernel ports
+via `ipc_port_alloc_special` and deallocates them, defaulting to 100
+and writable up to 100000. Validates `ipc_object_zone` UMA allocation,
+port refcount lifecycle, and `ipc_space_kernel` as a context. Returns
+the count successfully cycled.
+
+### B. Wired no-arg trap-family syscalls (mach_reply_port, task_self_trap, thread_self_trap, host_self_trap)
+
+The plan-of-record approach (Phase C option 2 from the original
+notes): a new `src/mach_syscall_wire.c` calls `kern_syscall_register`
+directly per syscall with `offset=NO_SYSCALL` to trigger dynamic slot
+allocation, then publishes the assigned number via
+`sysctl mach.syscall.<name>` so userland can discover it. Each handler
+is wrapped in a `p_machdata == NULL` guard that returns MACH_PORT_NULL
+for processes without Mach state (same value Apple's API returns on
+no-resources, no NULL-deref in `current_task()`). All four sysent
+slots come up at SI_SUB_INTRINSIC and tear down cleanly at module
+unload.
+
+The accompanying `mach_task_fork` change in `kern/task.c` was needed
+to make this work: children forked from pre-mach.ko parents were
+getting a zero-filled task struct (from the `process_init` eventhandler)
+but never initialized, so any subsequent `itk_space` deref would
+NULL-fault. Now we call `task_init_internal(TASK_NULL, child_task)`
+when the parent has no Mach state, which initializes the child's
+fields without trying to inherit from a non-existent parent.
+
+A tracked userland test program at `tests/test_mach_syscall0.c` reads
+`MACH_SYSCALL_NUM` from the env, calls `syscall(num)`, and prints the
+result; the smoke script builds it on demand.
+
+### C. mach.stats.{ports_in_use, kmsgs_in_use} — live counters
+
+Two new read-only sysctls under `mach.stats`. Both source from UMA
+zone introspection via `uma_zone_get_cur()`:
+
+- `mach.stats.ports_in_use` ← `uma_zone_get_cur(ipc_object_zones[IOT_PORT])`
+- `mach.stats.kmsgs_in_use` ← `uma_zone_get_cur(ipc_kmsg_zone)`
+
+The legacy `port_count` global in `ipc_port.c` is only compiled
+under `#if MACH_ASSERT`, which we don't define. UMA's per-zone
+counter gives the same answer without enabling the broader MACH_ASSERT
+debug scaffolding. Useful for leak detection in regression smoke:
+a steady count across repeated `test_port_lifecycle` runs proves no
+zone leak.
+
+### D. mach.test_in_kernel_mqueue — kmsg/mqueue primitive test
+
+The full Mach IPC round-trip test (allocate port → `ipc_mqueue_send`
+→ `ipc_mqueue_receive`) needs a Mach-aware thread context
+(`ith_object`, `ith_msg`) that's hard to fabricate from a sysctl
+handler — `ipc_mqueue_send` routes special-port messages through
+`ipc_kobject_server`, and `ipc_mqueue_receive` requires
+`thread->ith_object` to be pre-set. So this test sits at a lower
+layer: allocate a port, allocate a kmsg, **manually** enqueue it
+into the port's `ip_messages.imq_messages` queue via
+`ipc_kmsg_enqueue`, verify queue depth, dequeue, free everything.
+Pure data-structure exercise — no send/receive routing.
+
+Together with `test_port_lifecycle` this covers the primitives Mach
+IPC stands on: port zone alloc/free, kmsg zone alloc/free, queue list
+manipulation, port lifecycle under load. A full IPC round-trip
+becomes Phase C work, exercised from userland once libmach exists.
+
+## Smoke harness
+
+`src/mach_kmod/smoke-sysctls.sh` runs the full regression set as
+16 PASS/FAIL checks: every sysctl (with read/write where applicable),
+every wired syscall (the userland helper builds on first run),
+and the two test sysctls. Output is plain text; exit code is
+non-zero on any FAIL. Run as root after `kldload mach`:
+
+```sh
+cd src/mach_kmod && ./smoke-sysctls.sh
+# … 16 lines of PASS …
+# === SMOKE TOTAL: 16 pass, 0 fail ===
+```
+
+The script is the canonical "did Phase B regress?" check during
+ongoing development.
+
 ## What's left for Phase C
 
-The kmod is loaded but **Apple Mach syscalls are not wired into the
-kernel's sysent table**. `mach_module.c` registers an
-`osx_syscalls[]` array of `SYSCALL_INIT_HELPER` entries, but every
-entry's `SYS_<name>` constant is set to `NO_SYSCALL` (-1) by our
-compat shim (we don't have Apple-assigned syscall numbers because
-their syscalls.master entries aren't in our build). `NO_SYSCALL`
-doubles as the end-of-array sentinel for `kern_syscall_helper_register`'s
-for-loop, so the loop terminates at the first entry without
-registering anything.
+The kmod surface is now stable from the kernel side. The remaining
+work to get from "kmod functional" to "actual Mach IPC between two
+userland processes" is in userland:
 
-Phase C options for wiring real syscalls:
+1. **libmach userland shim.** A small C library that resolves the
+   syscall number for each wired Mach trap once (via `sysctl mach.syscall.<name>`)
+   and exposes `mach_reply_port()`, `task_self_trap()`, etc. as
+   regular C functions. Eliminates raw `syscall(num)` from callers.
 
-- Assign explicit free FreeBSD syscall numbers per Apple call and
-  set them in the shim. Conflicts unlikely above SYS_MAXSYSCALL but
-  needs care.
+2. **Lazy Mach init for pre-load processes.** Today, processes that
+   existed before `kldload mach` have `p_machdata == NULL` and the
+   guard returns MACH_PORT_NULL. To support arbitrary callers, the
+   wired syscall wrappers should promote the calling process by
+   running `mach_task_init` logic on first call — or a libmach
+   helper invokes a dedicated bootstrap syscall to do the same.
 
-- Call `kern_syscall_register` per entry from a custom helper that
-  doesn't use NO_SYSCALL as the sentinel — pass NO_SYSCALL as the
-  *requested* number to trigger dynamic allocation, and have the
-  module log the assigned number so libmach knows where to find it.
+3. **End-to-end `mach_msg` test from userland.** Wire
+   `mach_msg_trap` (or a derivative) and send/receive a message
+   between two forked children. Proof-of-life for the actual IPC,
+   not just the syscall plumbing.
 
-- Skip syscalls entirely and use `/dev/mach` ioctls. Smaller
-  attack surface but diverges from Apple's API shape.
-
-Verifying Mach IPC functions at the kernel level is implicitly proven
-by `ipc_host_init` allocating 3 kernel ports during module load
-without crashing — that exercises `ipc_port_alloc_kernel` and the
-underlying `ipc_object_zone` allocation path. A standalone in-kernel
-round-trip test (allocate port → `ipc_kmsg_send` → `ipc_mqueue_receive`)
-is a one-hour add via a debug sysctl or a tiny companion kmod, and
-would give end-to-end IPC-works-in-kernel proof without needing the
-syscall-wiring decision above.
+4. **Beyond that:** libxpc, liblaunch, the freebsd-launchd port.
+   `libdispatch` is available via gershwin-developer; libxpc is
+   the next porting investigation (separate planning).
