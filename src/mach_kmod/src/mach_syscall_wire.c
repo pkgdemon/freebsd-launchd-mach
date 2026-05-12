@@ -67,6 +67,16 @@ int sys_thread_self_trap(struct thread *, struct thread_self_trap_args *);
 int sys_host_self_trap(struct thread *, struct host_self_trap_args *);
 
 /*
+ * Phase C2: lazy Mach init. If the calling process/thread has no
+ * Mach state (it pre-existed mach.ko or the relevant eventhandlers
+ * aren't running), allocate one now so the underlying Mach handler
+ * has a real task/thread to operate on. Defined in src/kern/task.c
+ * and src/mach_thread.c respectively.
+ */
+int mach_task_init_lazy(struct proc *p);
+int mach_thread_init_lazy(struct thread *td);
+
+/*
  * NULL-guard wrappers. The "no Mach state" path returns MACH_PORT_NULL
  * (0) — the same value Apple's API would return on no-resources —
  * instead of NULL-faulting in current_task() / itk_space. A future
@@ -76,6 +86,8 @@ int sys_host_self_trap(struct thread *, struct host_self_trap_args *);
 static int
 sys_mach_reply_port_guarded(struct thread *td, struct mach_reply_port_args *uap)
 {
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
 	if (td->td_proc->p_machdata == NULL) {
 		td->td_retval[0] = 0;	/* MACH_PORT_NULL */
 		return (0);
@@ -86,6 +98,8 @@ sys_mach_reply_port_guarded(struct thread *td, struct mach_reply_port_args *uap)
 static int
 sys_task_self_trap_guarded(struct thread *td, struct task_self_trap_args *uap)
 {
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
 	if (td->td_proc->p_machdata == NULL) {
 		td->td_retval[0] = 0;	/* MACH_PORT_NULL */
 		return (0);
@@ -96,7 +110,11 @@ sys_task_self_trap_guarded(struct thread *td, struct task_self_trap_args *uap)
 static int
 sys_thread_self_trap_guarded(struct thread *td, struct thread_self_trap_args *uap)
 {
-	if (td->td_proc->p_machdata == NULL) {
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_machdata == NULL)
+		mach_thread_init_lazy(td);
+	if (td->td_proc->p_machdata == NULL || td->td_machdata == NULL) {
 		td->td_retval[0] = 0;	/* MACH_PORT_NULL */
 		return (0);
 	}
@@ -106,7 +124,11 @@ sys_thread_self_trap_guarded(struct thread *td, struct thread_self_trap_args *ua
 static int
 sys_host_self_trap_guarded(struct thread *td, struct host_self_trap_args *uap)
 {
-	if (td->td_proc->p_machdata == NULL) {
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_machdata == NULL)
+		mach_thread_init_lazy(td);
+	if (td->td_proc->p_machdata == NULL || td->td_machdata == NULL) {
 		td->td_retval[0] = 0;	/* MACH_PORT_NULL */
 		return (0);
 	}

@@ -236,6 +236,45 @@ mach_thread_init(void *arg __unused, struct thread *td)
 	ipc_thr_act_init(thread);
 }
 
+/*
+ * mach_thread_init_lazy — give a thread Mach state on demand.
+ *
+ * Called by the wired thread-self / host-self syscall wrappers when
+ * current_thread() would return NULL (because the thread eventhandlers
+ * never ran — either because the kmod loaded after this thread was
+ * created, or because the handlers are intentionally not registered).
+ *
+ * Combines the work of both mach_thread_init (allocate + ipc_thr_act_init)
+ * and mach_thread_create (ref_count + ipc_thread_init) so the resulting
+ * td_machdata is in the same shape as if both eventhandlers had fired.
+ * Idempotent; concurrent callers race on atomic_cmpset_ptr with the
+ * loser leaking a bounded amount.
+ */
+int
+mach_thread_init_lazy(struct thread *td)
+{
+	thread_t thread;
+
+	if (td->td_machdata != NULL)
+		return (0);
+
+	thread = uma_zalloc(thread_shuttle_zone, M_NOWAIT | M_ZERO);
+	if (thread == NULL)
+		return (ENOMEM);
+	mtx_init(&thread->ith_lock_data, "mach_thread lock", NULL, MTX_DEF);
+	thread->ith_td = td;
+	ipc_thr_act_init(thread);
+	thread->ref_count = 1;
+	ipc_thread_init(thread);
+
+	if (atomic_cmpset_ptr((volatile uintptr_t *)&td->td_machdata,
+	    (uintptr_t)NULL, (uintptr_t)thread))
+		return (0);
+
+	/* Lost the race; leak this thread (see mach_task_init_lazy comment). */
+	return (0);
+}
+
 static void
 mach_thread_fini(void *arg __unused, struct thread *td)
 {

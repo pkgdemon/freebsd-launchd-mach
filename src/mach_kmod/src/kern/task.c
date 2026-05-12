@@ -1109,6 +1109,53 @@ mach_task_init(void *arg __unused, struct proc *p)
 	}
 }
 
+/*
+ * mach_task_init_lazy — give a process a Mach task on demand.
+ *
+ * Called by the wired Mach syscall wrappers when p_machdata == NULL —
+ * i.e. for any process that pre-existed mach.ko's load (the eventhandler
+ * couldn't have run for them) or any process whose Mach state was torn
+ * down. Idempotent: if p_machdata is already set, returns 0 immediately.
+ *
+ * Concurrency: two threads in the same process racing through the
+ * wrappers will both reach here with p_machdata == NULL. Both allocate
+ * a task; the loser's task gets discarded via the atomic_cmpset_ptr
+ * check below. The loser-task leak is small (one struct mach_task) and
+ * bounded (at most one per losing race), and the alternative — taking
+ * a sleepable lock around uma_zalloc — is heavier.
+ *
+ * Returns 0 on success, non-zero on allocation failure.
+ */
+int
+mach_task_init_lazy(struct proc *p)
+{
+	task_t task;
+
+	if (p->p_machdata != NULL)
+		return (0);
+
+	task = uma_zalloc(task_zone, M_NOWAIT | M_ZERO);
+	if (task == NULL)
+		return (ENOMEM);
+	task->itk_p = p;
+	mach_mutex_init(&task->lock, "ETAP_THREAD_TASK_NEW");
+	mach_mutex_init(&task->itk_lock_data, "ETAP_THREAD_TASK_ITK");
+	queue_init(&task->semaphore_list);
+	task_create_internal(task);
+	task_init_internal(TASK_NULL, task);
+
+	if (atomic_cmpset_ptr((volatile uintptr_t *)&p->p_machdata,
+	    (uintptr_t)NULL, (uintptr_t)task))
+		return (0);
+
+	/*
+	 * Lost the race — another thread installed a task first. Leak
+	 * our task; teardown of an unreachable task_create_internal-style
+	 * object is non-trivial and the leak is bounded.
+	 */
+	return (0);
+}
+
 static void
 mach_task_fork(void *arg __unused, struct proc *p1, struct proc *p2, int flags __unused)
 {
@@ -1169,12 +1216,20 @@ task_sysinit(void *arg __unused)
 							NULL, NULL, uma_task_init,
 							uma_task_fini, 1, 0);
 
-	#if 0 /*PhaseB-bisect*/
-	EVENTHANDLER_REGISTER(process_init, mach_task_init, NULL, EVENTHANDLER_PRI_ANY);
-#endif
-	#if 0 /*PhaseB-bisect*/
-	EVENTHANDLER_REGISTER(process_fork, mach_task_fork, NULL, EVENTHANDLER_PRI_ANY);
-#endif
+	/*
+	 * Phase C2 is lazy-init-only: do NOT re-enable the process_init
+	 * or process_fork eventhandlers. mach_task_init_lazy() (above) is
+	 * called from the wired syscall wrappers on first use, which is
+	 * sufficient for any process that wants Mach state. Re-enabling
+	 * the eventhandlers re-introduces a kldload-time / first-fork
+	 * panic chain that Phase B's bisect originally isolated; the
+	 * existing NULL guards in the handlers were necessary but not
+	 * sufficient (a smoke run completed through task_self_trap then
+	 * panicked on thread_self_trap during 2026-05-11 C2 attempt — the
+	 * task eventhandlers may be safe, but enabling them without the
+	 * thread eventhandlers leaves an inconsistent state that's worse
+	 * than off entirely). Keep handlers OFF; rely on lazy paths.
+	 */
 }
 
 /* before SI_SUB_INTRINSIC and after SI_SUB_EVENTHANDLER */
