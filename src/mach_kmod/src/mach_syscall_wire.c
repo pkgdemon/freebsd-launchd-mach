@@ -43,6 +43,8 @@
  */
 struct mach_reply_port_args;
 struct task_self_trap_args;
+struct thread_self_trap_args;
+struct host_self_trap_args;
 
 SYSCTL_DECL(_mach);
 static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
@@ -61,6 +63,8 @@ static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
  */
 int sys_mach_reply_port(struct thread *, struct mach_reply_port_args *);
 int sys_task_self_trap(struct thread *, struct task_self_trap_args *);
+int sys_thread_self_trap(struct thread *, struct thread_self_trap_args *);
+int sys_host_self_trap(struct thread *, struct host_self_trap_args *);
 
 /*
  * NULL-guard wrappers. The "no Mach state" path returns MACH_PORT_NULL
@@ -89,6 +93,26 @@ sys_task_self_trap_guarded(struct thread *td, struct task_self_trap_args *uap)
 	return (sys_task_self_trap(td, uap));
 }
 
+static int
+sys_thread_self_trap_guarded(struct thread *td, struct thread_self_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 0;	/* MACH_PORT_NULL */
+		return (0);
+	}
+	return (sys_thread_self_trap(td, uap));
+}
+
+static int
+sys_host_self_trap_guarded(struct thread *td, struct host_self_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 0;	/* MACH_PORT_NULL */
+		return (0);
+	}
+	return (sys_host_self_trap(td, uap));
+}
+
 static struct sysent mach_reply_port_sysent = {
 	.sy_narg	= 0,
 	.sy_call	= (sy_call_t *)sys_mach_reply_port_guarded,
@@ -103,11 +127,31 @@ static struct sysent task_self_trap_sysent = {
 	.sy_flags	= 0,
 };
 
+static struct sysent thread_self_trap_sysent = {
+	.sy_narg	= 0,
+	.sy_call	= (sy_call_t *)sys_thread_self_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
+static struct sysent host_self_trap_sysent = {
+	.sy_narg	= 0,
+	.sy_call	= (sy_call_t *)sys_host_self_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
 static int mach_reply_port_offset = NO_SYSCALL;
 static struct sysent mach_reply_port_old_sysent;
 
 static int task_self_trap_offset = NO_SYSCALL;
 static struct sysent task_self_trap_old_sysent;
+
+static int thread_self_trap_offset = NO_SYSCALL;
+static struct sysent thread_self_trap_old_sysent;
+
+static int host_self_trap_offset = NO_SYSCALL;
+static struct sysent host_self_trap_old_sysent;
 
 SYSCTL_INT(_mach_syscall, OID_AUTO, mach_reply_port, CTLFLAG_RD,
     &mach_reply_port_offset, 0,
@@ -117,6 +161,16 @@ SYSCTL_INT(_mach_syscall, OID_AUTO, mach_reply_port, CTLFLAG_RD,
 SYSCTL_INT(_mach_syscall, OID_AUTO, task_self_trap, CTLFLAG_RD,
     &task_self_trap_offset, 0,
     "Dynamically-allocated FreeBSD syscall number for task_self_trap "
+    "(-1 if registration failed)");
+
+SYSCTL_INT(_mach_syscall, OID_AUTO, thread_self_trap, CTLFLAG_RD,
+    &thread_self_trap_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for thread_self_trap "
+    "(-1 if registration failed)");
+
+SYSCTL_INT(_mach_syscall, OID_AUTO, host_self_trap, CTLFLAG_RD,
+    &host_self_trap_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for host_self_trap "
     "(-1 if registration failed)");
 
 static void
@@ -160,12 +214,20 @@ mach_syscall_wire_register(void *arg __unused)
 	    &mach_reply_port_sysent, &mach_reply_port_old_sysent);
 	wire_one("task_self_trap", &task_self_trap_offset,
 	    &task_self_trap_sysent, &task_self_trap_old_sysent);
+	wire_one("thread_self_trap", &thread_self_trap_offset,
+	    &thread_self_trap_sysent, &thread_self_trap_old_sysent);
+	wire_one("host_self_trap", &host_self_trap_offset,
+	    &host_self_trap_sysent, &host_self_trap_old_sysent);
 }
 
 static void
 mach_syscall_wire_deregister(void *arg __unused)
 {
 
+	unwire_one("host_self_trap", &host_self_trap_offset,
+	    &host_self_trap_old_sysent);
+	unwire_one("thread_self_trap", &thread_self_trap_offset,
+	    &thread_self_trap_old_sysent);
 	unwire_one("task_self_trap", &task_self_trap_offset,
 	    &task_self_trap_old_sysent);
 	unwire_one("mach_reply_port", &mach_reply_port_offset,

@@ -51,12 +51,16 @@ check sysctl_test_port_reread        sysctl mach.test_port_lifecycle
 check sysctl_test_port_write_100     sysctl -w mach.test_port_lifecycle=100
 check sysctl_mach_reply_port_no      sysctl mach.syscall.mach_reply_port
 check sysctl_task_self_trap_no       sysctl mach.syscall.task_self_trap
+check sysctl_thread_self_trap_no     sysctl mach.syscall.thread_self_trap
+check sysctl_host_self_trap_no       sysctl mach.syscall.host_self_trap
 
 # Wired syscalls. Each is invoked from a process that may or may not have
 # Mach state; the NULL-guard wrapper means a 0 return is a valid PASS
 # (MACH_PORT_NULL), not a failure.
 invoke_syscall mach_reply_port
 invoke_syscall task_self_trap
+invoke_syscall thread_self_trap
+invoke_syscall host_self_trap
 
 echo
 echo "=== SMOKE TOTAL: $PASS pass, $FAIL fail ==="
