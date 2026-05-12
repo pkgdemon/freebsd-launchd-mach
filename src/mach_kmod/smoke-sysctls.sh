@@ -23,6 +23,8 @@ TEST_BIN=/tmp/test_mach_syscall0
 TEST_SRC="$HERE/tests/test_mach_syscall0.c"
 TEST_LIBMACH_BIN=/tmp/test_libmach
 TEST_LIBMACH_SRC="$HERE/tests/test_libmach.c"
+TEST_MACH_MSG_BIN=/tmp/test_mach_msg
+TEST_MACH_MSG_SRC="$HERE/tests/test_mach_msg.c"
 
 if [ ! -x "$TEST_BIN" ] || [ "$TEST_SRC" -nt "$TEST_BIN" ]; then
     cc -O2 -o "$TEST_BIN" "$TEST_SRC" || {
@@ -41,6 +43,17 @@ if [ ! -x "$TEST_LIBMACH_BIN" ] || \
         "$LIBMACH_DIR/mach_traps.c" "$TEST_LIBMACH_SRC" \
         -o "$TEST_LIBMACH_BIN" || {
         echo "FAIL build test_libmach"
+        FAIL=$((FAIL+1))
+    }
+fi
+
+if [ ! -x "$TEST_MACH_MSG_BIN" ] || \
+   [ "$TEST_MACH_MSG_SRC" -nt "$TEST_MACH_MSG_BIN" ] || \
+   [ "$LIBMACH_DIR/mach_traps.c" -nt "$TEST_MACH_MSG_BIN" ]; then
+    cc -O2 -I"$LIBMACH_DIR/include" \
+        "$LIBMACH_DIR/mach_traps.c" "$TEST_MACH_MSG_SRC" \
+        -o "$TEST_MACH_MSG_BIN" || {
+        echo "FAIL build test_mach_msg"
         FAIL=$((FAIL+1))
     }
 fi
@@ -72,6 +85,7 @@ check sysctl_mach_reply_port_no      sysctl mach.syscall.mach_reply_port
 check sysctl_task_self_trap_no       sysctl mach.syscall.task_self_trap
 check sysctl_thread_self_trap_no     sysctl mach.syscall.thread_self_trap
 check sysctl_host_self_trap_no       sysctl mach.syscall.host_self_trap
+check sysctl_mach_msg_trap_no        sysctl mach.syscall.mach_msg_trap
 check sysctl_stats_ports_in_use      sysctl mach.stats.ports_in_use
 check sysctl_stats_kmsgs_in_use      sysctl mach.stats.kmsgs_in_use
 check sysctl_test_in_kernel_mqueue   sysctl mach.test_in_kernel_mqueue
@@ -103,6 +117,22 @@ if [ -x "$TEST_LIBMACH_BIN" ]; then
     fi
 else
     echo "SKIP libmach_trap_family: binary missing"
+fi
+
+# mach_msg receive-with-timeout=0 against an empty port. Expected:
+# the syscall is reachable AND returns MACH_RCV_TIMED_OUT.
+if [ -x "$TEST_MACH_MSG_BIN" ]; then
+    OUTPUT=$("$TEST_MACH_MSG_BIN" 2>&1)
+    if [ $? -eq 0 ]; then
+        echo "PASS mach_msg_recv_timeout:"
+        echo "$OUTPUT" | sed 's/^/    /'
+        PASS=$((PASS+1))
+    else
+        echo "FAIL mach_msg_recv_timeout: $OUTPUT"
+        FAIL=$((FAIL+1))
+    fi
+else
+    echo "SKIP mach_msg_recv_timeout: binary missing"
 fi
 
 echo

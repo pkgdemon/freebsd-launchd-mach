@@ -32,7 +32,10 @@
 #include <sys/sysent.h>
 #include <sys/proc.h>
 
+#include <sys/sysproto.h>		/* canonical PADL_/PADR_ macros — */
+					/* MUST come before _mach_sysproto */
 #include <bsm/audit_kevents.h>		/* AUE_NULL */
+#include <sys/mach/_mach_sysproto.h>	/* mach_msg_trap_args (full def) */
 
 /*
  * Forward-declare per-syscall arg structs. Full definitions come from
@@ -45,6 +48,7 @@ struct mach_reply_port_args;
 struct task_self_trap_args;
 struct thread_self_trap_args;
 struct host_self_trap_args;
+struct mach_msg_trap_args;
 
 SYSCTL_DECL(_mach);
 static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
@@ -65,6 +69,7 @@ int sys_mach_reply_port(struct thread *, struct mach_reply_port_args *);
 int sys_task_self_trap(struct thread *, struct task_self_trap_args *);
 int sys_thread_self_trap(struct thread *, struct thread_self_trap_args *);
 int sys_host_self_trap(struct thread *, struct host_self_trap_args *);
+int sys_mach_msg_trap(struct thread *, struct mach_msg_trap_args *);
 
 /*
  * Phase C2: lazy Mach init. If the calling process/thread has no
@@ -135,6 +140,31 @@ sys_host_self_trap_guarded(struct thread *td, struct host_self_trap_args *uap)
 	return (sys_host_self_trap(td, uap));
 }
 
+/*
+ * mach_msg_trap takes real args (7 of them). The handler in
+ * src/mach_traps.c forwards to sys_mach_msg_overwrite_trap with
+ * rcv_msg=NULL. Both task and thread Mach state are required —
+ * mach_msg internals reach current_task()->itk_space (send path)
+ * and current_thread()->ith_* (receive path).
+ */
+static int
+sys_mach_msg_trap_guarded(struct thread *td, struct mach_msg_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_machdata == NULL)
+		mach_thread_init_lazy(td);
+	if (td->td_proc->p_machdata == NULL || td->td_machdata == NULL) {
+		/* Mach state unavailable — return a generic error to userland.
+		 * MACH_SEND_NO_BUFFER is the closest "we couldn't even try"
+		 * code in the standard return set. */
+		td->td_retval[0] = 0x1000000d;	/* MACH_SEND_NO_BUFFER */
+		return (0);
+	}
+	uap->notify = 0;
+	return (sys_mach_msg_trap(td, uap));
+}
+
 static struct sysent mach_reply_port_sysent = {
 	.sy_narg	= 0,
 	.sy_call	= (sy_call_t *)sys_mach_reply_port_guarded,
@@ -163,6 +193,22 @@ static struct sysent host_self_trap_sysent = {
 	.sy_flags	= 0,
 };
 
+/*
+ * mach_msg_trap as a 6-arg syscall — the trailing `notify` arg is
+ * dropped because FreeBSD's libc syscall() only correctly passes 6
+ * args via the kernel ABI on amd64. Our wrapper hard-codes notify
+ * to MACH_PORT_NULL; libmach's mach_msg() accepts notify in its API
+ * but ignores it. (Apple's mach_msg2_trap addresses this differently
+ * by passing a packed argument descriptor; we can move to that model
+ * later if real callers need notify.)
+ */
+static struct sysent mach_msg_trap_sysent = {
+	.sy_narg	= 6,
+	.sy_call	= (sy_call_t *)sys_mach_msg_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
 static int mach_reply_port_offset = NO_SYSCALL;
 static struct sysent mach_reply_port_old_sysent;
 
@@ -174,6 +220,9 @@ static struct sysent thread_self_trap_old_sysent;
 
 static int host_self_trap_offset = NO_SYSCALL;
 static struct sysent host_self_trap_old_sysent;
+
+static int mach_msg_trap_offset = NO_SYSCALL;
+static struct sysent mach_msg_trap_old_sysent;
 
 SYSCTL_INT(_mach_syscall, OID_AUTO, mach_reply_port, CTLFLAG_RD,
     &mach_reply_port_offset, 0,
@@ -194,6 +243,11 @@ SYSCTL_INT(_mach_syscall, OID_AUTO, host_self_trap, CTLFLAG_RD,
     &host_self_trap_offset, 0,
     "Dynamically-allocated FreeBSD syscall number for host_self_trap "
     "(-1 if registration failed)");
+
+SYSCTL_INT(_mach_syscall, OID_AUTO, mach_msg_trap, CTLFLAG_RD,
+    &mach_msg_trap_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for mach_msg_trap "
+    "(7-arg syscall; -1 if registration failed)");
 
 static void
 wire_one(const char *name, int *offset, struct sysent *sy,
@@ -240,12 +294,16 @@ mach_syscall_wire_register(void *arg __unused)
 	    &thread_self_trap_sysent, &thread_self_trap_old_sysent);
 	wire_one("host_self_trap", &host_self_trap_offset,
 	    &host_self_trap_sysent, &host_self_trap_old_sysent);
+	wire_one("mach_msg_trap", &mach_msg_trap_offset,
+	    &mach_msg_trap_sysent, &mach_msg_trap_old_sysent);
 }
 
 static void
 mach_syscall_wire_deregister(void *arg __unused)
 {
 
+	unwire_one("mach_msg_trap", &mach_msg_trap_offset,
+	    &mach_msg_trap_old_sysent);
 	unwire_one("host_self_trap", &host_self_trap_offset,
 	    &host_self_trap_old_sysent);
 	unwire_one("thread_self_trap", &thread_self_trap_offset,

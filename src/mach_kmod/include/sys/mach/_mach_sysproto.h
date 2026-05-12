@@ -21,15 +21,37 @@
 #include <sys/mach/message.h>
 
 /*
- * Only define our stub PADL_/PADR_ if FreeBSD's <sys/sysproto.h>
- * hasn't supplied real ones yet. mach_traps.c and friends include
- * <sys/sysproto.h> before <sys/mach/...>, so by the time we reach
- * here the canonical macros are already in place and we leave them
- * alone (-Wmacro-redefined would fire on a duplicate define).
+ * PADL_/PADR_ alignment macros. The canonical FreeBSD versions in
+ * <sys/sysproto.h> pad each syscall arg field out to register_t-size
+ * (8 bytes on amd64) so that the kernel's argument fetcher (which
+ * writes register_t-sized slots into the struct) lines up with the
+ * struct field offsets.
+ *
+ * Originally we stubbed these to 0 because we thought the syscalls
+ * weren't being invoked from userland (NO_SYSCALL meant the helper-
+ * register loop terminated immediately). Once we wired the trap
+ * family via kern_syscall_register, that became false — multi-arg
+ * syscalls like mach_msg_trap now ARE invoked from userland, and the
+ * 0/0 stubs produce a PACKED struct whose 4-byte fields don't line
+ * up with the kernel's 8-byte slot writes (rcv_size winds up at
+ * struct offset 16 while the kernel writes args[2] at offset 16
+ * containing the previous arg — values bleed across fields).
+ *
+ * Use the canonical PADL_/PADR_ from <sys/sysproto.h> if available
+ * (mach_traps.c et al. include sys/sysproto.h before reaching here).
+ * Otherwise replicate the standard little-endian definition.
  */
+#include <machine/_types.h>		/* __register_t */
 #ifndef	PADL_
+#define	_MACH_PAD_(t)	(sizeof(__register_t) <= sizeof(t) \
+				? 0 : sizeof(__register_t) - sizeof(t))
+#if BYTE_ORDER == LITTLE_ENDIAN
 #define	PADL_(t)	0
+#define	PADR_(t)	_MACH_PAD_(t)
+#else
+#define	PADL_(t)	_MACH_PAD_(t)
 #define	PADR_(t)	0
+#endif
 #endif
 
 

@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include <mach/mach_traps.h>
+#include <mach/message.h>
 
 #define	NO_SYSCALL	(-1)
 
@@ -108,4 +109,47 @@ mach_host_self(void)
 			return (MACH_PORT_NULL);
 	}
 	return ((mach_port_name_t)syscall(num));
+}
+
+/*
+ * mach_msg — send and/or receive a Mach message.
+ *
+ * Resolves mach.syscall.mach_msg_trap on first call. If the syscall
+ * isn't registered, returns a non-zero indeterminate error code
+ * (we don't have a defined "syscall unavailable" code in the public
+ * mach_msg return-code space, so we return MACH_RCV_TIMED_OUT as a
+ * placeholder error; callers should check that mach.ko is loaded
+ * before relying on this).
+ */
+/*
+ * mach_msg — 6-arg call into the wired mach_msg_trap.
+ *
+ * FreeBSD's libc syscall() only correctly shifts up to 6 args into
+ * the kernel-syscall ABI registers (rdi, rsi, rdx, r10, r8, r9). The
+ * Apple-shape mach_msg_trap has 7 args (msg, option, send_size,
+ * rcv_size, rcv_name, timeout, notify); calling syscall(num, ...)
+ * with the 7th arg silently garbles args 4-7 (kernel sees rcv_size=0,
+ * rcv_name=0, timeout=passed-rcv_size).
+ *
+ * Workaround: pass only the first 6 args to the kernel. The kernel
+ * wrapper sets notify=MACH_PORT_NULL. The `notify` arg here is
+ * accepted for API compatibility but currently ignored — a future
+ * `mach_msg2`-style wrapper or an inline-asm 7-arg syscall stub
+ * can lift this restriction if real use needs notify.
+ */
+mach_msg_return_t
+mach_msg(mach_msg_header_t *msg, mach_msg_option_t option,
+    mach_msg_size_t send_size, mach_msg_size_t rcv_size,
+    mach_port_name_t rcv_name, mach_msg_timeout_t timeout,
+    mach_port_name_t notify __attribute__((unused)))
+{
+	static int num = NO_SYSCALL;
+
+	if (num == NO_SYSCALL) {
+		num = resolve_syscall("mach_msg_trap");
+		if (num == NO_SYSCALL)
+			return (MACH_RCV_TIMED_OUT);
+	}
+	return ((mach_msg_return_t)syscall(num, msg, option,
+	    send_size, rcv_size, rcv_name, timeout));
 }
