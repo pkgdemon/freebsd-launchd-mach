@@ -257,8 +257,14 @@ sys_task_set_special_port_trap(struct thread *td,
 	ipc_port_t port = IP_NULL;
 	kern_return_t kr;
 
-	/* MACH_PORT_NULL is a legal "clear the slot" value. */
-	if (uap->port != MACH_PORT_NULL) {
+	/*
+	 * uap->port is a userland mach_port_name_t (unsigned int), not the
+	 * kernel-side mach_port_t (struct ipc_port *). Compare to 0
+	 * directly — using MACH_PORT_NULL here would be a pointer/integer
+	 * compare (kernel MACH_PORT_NULL is (mach_port_t)0). A 0 name is
+	 * the "clear the slot" value.
+	 */
+	if (uap->port != 0) {
 		kr = ipc_object_copyin(task->itk_space, uap->port,
 		    MACH_MSG_TYPE_COPY_SEND, (ipc_object_t *)&port);
 		if (kr != KERN_SUCCESS) {
