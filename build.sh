@@ -474,6 +474,49 @@ chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libdispatch \
 echo "==> libdispatch install verified"
 
 #
+# 3i. build libxpc (src/libxpc, vendored from ravynOS lib/libxpc/).
+#     Apple-canonical XPC userland library, ported. Depends on
+#     libsystem_kernel (Mach trap shims) and libdispatch (queues +
+#     DISPATCH_SOURCE_TYPE_MACH_RECV). The bootstrap protocol is
+#     vendored in directly (../bootstrap/libbootstrap.c is in the
+#     Makefile SRCS) so libxpc.so resolves bootstrap_check_in /
+#     bootstrap_look_up internally without needing a separate
+#     libbootstrap.so on disk.
+#
+#     Host build via bsd.lib.mk — same pattern as libsystem_kernel.
+#     Install:
+#       /usr/lib/libsystem/libxpc.so + libxpc.so.4 (the lib)
+#       /usr/include/xpc/{activity,base,connection,debug,endpoint,
+#                         launchd,xpc}.h
+#
+echo "==> building libxpc (src/libxpc)"
+mkdir -p "$WORK/rootfs/usr/include/xpc"
+make -C "$ROOT/src/libxpc" \
+    DESTDIR="$WORK/rootfs" \
+    PREFIX=/usr \
+    CFLAGS="-I$WORK/rootfs/usr/include" \
+    LDFLAGS="-L$WORK/rootfs/usr/lib/libsystem -Wl,-rpath,/usr/lib/libsystem" \
+    all install
+ls -lh "$WORK/rootfs/usr/lib/libsystem/libxpc.so" \
+       "$WORK/rootfs/usr/include/xpc/xpc.h"
+
+# Re-prime ldconfig hints now that libxpc is installed at /usr/lib/libsystem.
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+
+# Verify libxpc install: shape + ldconfig hint + ldd-resolution of
+# its libdispatch / libsystem_kernel deps. Fails fast if missing.
+echo "==> verifying libxpc install"
+test -f "$WORK/rootfs/usr/lib/libsystem/libxpc.so.4" \
+    || { echo "FAIL: libxpc.so.4 missing"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/libsystem/libxpc.so" \
+    || { echo "FAIL: libxpc.so dev symlink missing"; exit 1; }
+test -f "$WORK/rootfs/usr/include/xpc/xpc.h" \
+    || { echo "FAIL: /usr/include/xpc/xpc.h missing"; exit 1; }
+chroot "$WORK/rootfs" ldconfig -r | grep -q libxpc \
+    || { echo "FAIL: ldconfig hints missing libxpc"; exit 1; }
+echo "==> libxpc install verified"
+
+#
 # 3z. purge build packages + clean pkg cache + tear down chroot.
 #     Runs LAST in the build phase, after every chroot-side build
 #     (libdispatch) has used cmake/ninja/clang. Build pkgs (cmake/ninja

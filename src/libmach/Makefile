@@ -9,6 +9,7 @@
 #   produces:
 #     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so
 #     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so.0
+#     ${DESTDIR}/usr/include/mach/mach.h
 #     ${DESTDIR}/usr/include/mach/mach_traps.h
 #     ${DESTDIR}/usr/include/mach/mach_traps_mux.h
 #     ${DESTDIR}/usr/include/mach/mach_port.h
@@ -25,7 +26,8 @@ CFLAGS+=	-I${.CURDIR}/include
 NO_MAN=		yes
 WARNS?=		6
 
-INCS=		include/mach/mach_traps.h \
+INCS=		include/mach/mach.h \
+		include/mach/mach_traps.h \
 		include/mach/mach_traps_mux.h \
 		include/mach/mach_port.h \
 		include/mach/message.h \
