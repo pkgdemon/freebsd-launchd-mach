@@ -54,6 +54,7 @@ struct _kernelrpc_mach_port_deallocate_trap_args;
 struct _kernelrpc_mach_port_insert_right_trap_args;
 struct task_get_special_port_trap_args;
 struct task_set_special_port_trap_args;
+struct host_set_special_port_trap_args;
 
 SYSCTL_DECL(_mach);
 static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
@@ -85,6 +86,8 @@ int sys_task_get_special_port_trap(struct thread *,
     struct task_get_special_port_trap_args *);
 int sys_task_set_special_port_trap(struct thread *,
     struct task_set_special_port_trap_args *);
+int sys_host_set_special_port_trap(struct thread *,
+    struct host_set_special_port_trap_args *);
 
 /*
  * Phase C2: lazy Mach init. If the calling process/thread has no
@@ -262,6 +265,25 @@ sys_task_set_special_port_trap_guarded(struct thread *td,
 	return (sys_task_set_special_port_trap(td, uap));
 }
 
+/*
+ * host_set_special_port — bootstrap-server-registration trap (Phase
+ * G2b). Needs Mach task state because the wrapper calls
+ * ipc_object_copyin against the caller's IPC space to translate the
+ * user port name. Reuses the KERN_INVALID_ARGUMENT no-state code.
+ */
+static int
+sys_host_set_special_port_trap_guarded(struct thread *td,
+    struct host_set_special_port_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 4;	/* KERN_INVALID_ARGUMENT */
+		return (0);
+	}
+	return (sys_host_set_special_port_trap(td, uap));
+}
+
 static struct sysent mach_reply_port_sysent = {
 	.sy_narg	= 0,
 	.sy_call	= (sy_call_t *)sys_mach_reply_port_guarded,
@@ -355,6 +377,13 @@ static struct sysent task_set_special_port_sysent = {
 	.sy_flags	= 0,
 };
 
+static struct sysent host_set_special_port_sysent = {
+	.sy_narg	= 3,
+	.sy_call	= (sy_call_t *)sys_host_set_special_port_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
 static int mach_reply_port_offset = NO_SYSCALL;
 static struct sysent mach_reply_port_old_sysent;
 
@@ -384,6 +413,9 @@ static struct sysent task_get_special_port_old_sysent;
 
 static int task_set_special_port_offset = NO_SYSCALL;
 static struct sysent task_set_special_port_old_sysent;
+
+static int host_set_special_port_offset = NO_SYSCALL;
+static struct sysent host_set_special_port_old_sysent;
 
 SYSCTL_INT(_mach_syscall, OID_AUTO, mach_reply_port, CTLFLAG_RD,
     &mach_reply_port_offset, 0,
@@ -449,6 +481,11 @@ SYSCTL_INT(_mach_syscall, OID_AUTO, task_set_special_port, CTLFLAG_RD,
     "Dynamically-allocated FreeBSD syscall number for task_set_special_port "
     "(3-arg syscall; -1 if registration failed)");
 
+SYSCTL_INT(_mach_syscall, OID_AUTO, host_set_special_port, CTLFLAG_RD,
+    &host_set_special_port_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for host_set_special_port "
+    "(3-arg syscall; -1 if registration failed)");
+
 static void
 wire_one(const char *name, int *offset, struct sysent *sy,
     struct sysent *old_sy)
@@ -509,12 +546,17 @@ mach_syscall_wire_register(void *arg __unused)
 	    &task_get_special_port_sysent, &task_get_special_port_old_sysent);
 	wire_one("task_set_special_port", &task_set_special_port_offset,
 	    &task_set_special_port_sysent, &task_set_special_port_old_sysent);
+	wire_one("host_set_special_port", &host_set_special_port_offset,
+	    &host_set_special_port_sysent, &host_set_special_port_old_sysent);
 }
 
 static void
 mach_syscall_wire_deregister(void *arg __unused)
 {
 
+	unwire_one("host_set_special_port",
+	    &host_set_special_port_offset,
+	    &host_set_special_port_old_sysent);
 	unwire_one("task_set_special_port",
 	    &task_set_special_port_offset,
 	    &task_set_special_port_old_sysent);

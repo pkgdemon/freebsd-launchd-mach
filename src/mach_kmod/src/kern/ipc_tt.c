@@ -624,6 +624,23 @@ task_get_special_port(
 
 	    case TASK_BOOTSTRAP_PORT:
 			port = ipc_port_copy_send(task->itk_bootstrap);
+		/*
+		 * freebsd-launchd-mach extension: if this task's
+		 * itk_bootstrap is unset (no launchd-as-PID-1 to inherit
+		 * from yet), fall back to the host-wide bootstrap port
+		 * registered by the bootstrap server via
+		 * host_set_special_port(HOST_BOOTSTRAP_PORT, ...). This
+		 * is the cross-task discovery path G2b adds: any
+		 * process can find the bootstrap server's port without
+		 * needing the per-task slot to be populated first.
+		 */
+		if (port == IP_NULL) {
+			host_lock(&realhost);
+			if (IP_VALID(realhost.special[HOST_BOOTSTRAP_PORT]))
+				port = ipc_port_copy_send(
+				    realhost.special[HOST_BOOTSTRAP_PORT]);
+			host_unlock(&realhost);
+		}
 		break;
 
 	    case TASK_SEATBELT_PORT:

@@ -92,12 +92,16 @@ typedef unsigned char mach_msg_descriptor_type_t;
  * layout in <sys/mach/message.h>; without it 64-bit alignment would
  * insert a 4-byte gap after `name` and break wire compatibility.
  *
- * Userland (non-_KERNEL) mach_msg_port_descriptor_t = 12 bytes:
- *   mach_port_t       name        (4)
- *   mach_msg_size_t   pad1        (4)
- *   uint16_t          pad2        (2)
- *   uint8_t           disposition (1)  -- MACH_MSG_TYPE_*
- *   uint8_t           type        (1)  -- MACH_MSG_PORT_DESCRIPTOR
+ * Wire layout is unambiguously 12 bytes per port descriptor. The
+ * kernel-side header uses bitfields (pad2:16 / disposition:8 /
+ * type:8) which would also be 4 bytes IF the compiler packs them
+ * into a single storage unit — but clang on FreeBSD is happy to
+ * give each bitfield its own unsigned-int slot when the underlying
+ * types differ, producing a 16-byte struct on the wire. To avoid
+ * that ambiguity we encode the same on-wire layout with plain
+ * uint16_t / uint8_t fields. Apple-source consumers using
+ * .disposition / .type still compile (the types collapse to the
+ * same unsigned char on both sides).
  */
 #pragma pack(4)
 
@@ -106,12 +110,12 @@ typedef struct {
 } mach_msg_body_t;
 
 typedef struct {
-	mach_port_t			name;
-	mach_msg_size_t			pad1;
-	unsigned int			pad2 : 16;
-	mach_msg_type_name_t		disposition : 8;
-	mach_msg_descriptor_type_t	type : 8;
-} mach_msg_port_descriptor_t;
+	mach_port_t			name;		/* 4 */
+	mach_msg_size_t			pad1;		/* 4 */
+	uint16_t			pad2;		/* 2 */
+	mach_msg_type_name_t		disposition;	/* 1 — MACH_MSG_TYPE_* */
+	mach_msg_descriptor_type_t	type;		/* 1 — MACH_MSG_PORT_DESCRIPTOR */
+} mach_msg_port_descriptor_t;	/* total: 12 bytes */
 
 #pragma pack()
 

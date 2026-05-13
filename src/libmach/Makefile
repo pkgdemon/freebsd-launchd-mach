@@ -13,6 +13,7 @@
 #     ${DESTDIR}/usr/include/mach/mach_port.h
 #     ${DESTDIR}/usr/include/mach/message.h
 #     ${DESTDIR}/usr/include/mach/task_special_ports.h
+#     ${DESTDIR}/usr/include/mach/host_special_ports.h
 #     ${DESTDIR}/usr/libdata/pkgconfig/libsystem_kernel.pc
 
 LIB=		system_kernel
@@ -26,7 +27,8 @@ WARNS?=		6
 INCS=		include/mach/mach_traps.h \
 		include/mach/mach_port.h \
 		include/mach/message.h \
-		include/mach/task_special_ports.h
+		include/mach/task_special_ports.h \
+		include/mach/host_special_ports.h
 INCSDIR=	${PREFIX}/include/mach
 LIBDIR=		${PREFIX}/lib/libsystem
 

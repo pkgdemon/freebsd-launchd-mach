@@ -20,6 +20,7 @@
 #include <mach/mach_port.h>
 #include <mach/message.h>
 #include <mach/task_special_ports.h>
+#include <mach/host_special_ports.h>
 
 #define	NO_SYSCALL	(-1)
 
@@ -238,4 +239,25 @@ task_set_special_port(mach_port_name_t task, int which, mach_port_t port)
 			return (KERN_RESOURCE_SHORTAGE);
 	}
 	return ((kern_return_t)syscall(num, task, which, port));
+}
+
+/*
+ * host_set_special_port — set a slot in the host's special-port
+ * array. Currently only HOST_BOOTSTRAP_PORT is accepted (kernel
+ * rejects other values with KERN_INVALID_ARGUMENT). The bootstrap
+ * server calls this once at startup to publish its receive port
+ * host-wide; thereafter task_get_special_port(TASK_BOOTSTRAP_PORT)
+ * falls back to it when the per-task itk_bootstrap slot is null.
+ */
+kern_return_t
+host_set_special_port(mach_port_name_t host, int which, mach_port_t port)
+{
+	static int num = NO_SYSCALL;
+
+	if (num == NO_SYSCALL) {
+		num = resolve_syscall("host_set_special_port");
+		if (num == NO_SYSCALL)
+			return (KERN_RESOURCE_SHORTAGE);
+	}
+	return ((kern_return_t)syscall(num, host, which, port));
 }

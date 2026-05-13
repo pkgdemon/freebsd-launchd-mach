@@ -84,6 +84,25 @@ else
     exit 1
 fi
 
+# 2c'. host_set_special_port + per-task → host fallback (Phase G2b).
+# Validates that after the bootstrap server registers its port host-wide
+# via host_set_special_port(HOST_BOOTSTRAP_PORT, ...), any task whose
+# itk_bootstrap slot is null gets a send right back to the same port
+# via task_get_special_port. This is the cross-task discovery path
+# the daemon will rely on once it ships in G2c.
+if [ -x /usr/tests/freebsd-launchd-mach/test_host_bootstrap ]; then
+    if /usr/tests/freebsd-launchd-mach/test_host_bootstrap; then
+        echo "HOST-BOOTSTRAP-OK: host-bootstrap fallback works"
+    else
+        rc=$?
+        echo "HOST-BOOTSTRAP-FAIL: test_host_bootstrap exit=$rc"
+        exit 1
+    fi
+else
+    echo "HOST-BOOTSTRAP-FAIL: test_host_bootstrap binary not installed"
+    exit 1
+fi
+
 # 2d. userland: bootstrap protocol round-trip (Phase G1). Hand-rolled
 # message-ID server loop dispatching CHECK_IN / LOOK_UP requests over
 # Mach IPC. The test spawns a pthread that runs bootstrap_server_run,

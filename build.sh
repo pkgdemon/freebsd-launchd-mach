@@ -259,6 +259,20 @@ cc -I"$WORK/rootfs/usr/include" \
    -lsystem_kernel
 ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_task_special_port"
 
+# test_host_bootstrap — Phase G2b validation: host_set_special_port
+# stores into realhost.special[HOST_BOOTSTRAP_PORT], and
+# task_get_special_port(TASK_BOOTSTRAP_PORT) falls back to it when
+# the per-task itk_bootstrap slot is null. HOST-BOOTSTRAP-FAIL
+# surfaces in run.sh on regression.
+echo "==> building test_host_bootstrap"
+cc -I"$WORK/rootfs/usr/include" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_host_bootstrap" \
+   "$ROOT/src/mach_kmod/tests/test_host_bootstrap.c" \
+   -lsystem_kernel
+ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_host_bootstrap"
+
 # Install <servers/bootstrap.h> public header. libsystem_kernel's
 # Makefile installs everything else under /usr/include/mach/; the
 # bootstrap header sits at /usr/include/servers/bootstrap.h per

@@ -187,6 +187,17 @@ expect {
 }
 expect {
     timeout {
+        puts "\nFAIL: HOST-BOOTSTRAP marker not seen"
+        exit 1
+    }
+    "HOST-BOOTSTRAP-FAIL" {
+        puts "\nFAIL: host_set_special_port fallback failed"
+        exit 1
+    }
+    "HOST-BOOTSTRAP-OK" { puts "\nOK: host_set_special_port fallback works" }
+}
+expect {
+    timeout {
         puts "\nFAIL: BOOTSTRAP marker not seen"
         exit 1
     }

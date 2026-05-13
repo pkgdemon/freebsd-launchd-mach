@@ -17,6 +17,17 @@
 #define HOST_USER_NOTIFICATION_PORT     (3 + HOST_MAX_SPECIAL_KERNEL_PORT)
 #define HOST_AUTOMOUNTD_PORT            (4 + HOST_MAX_SPECIAL_KERNEL_PORT)
 #define HOST_LOCKD_PORT                 (5 + HOST_MAX_SPECIAL_KERNEL_PORT)
+/*
+ * HOST_BOOTSTRAP_PORT (slot 13) — freebsd-launchd-mach extension.
+ * Apple's launchd populates each task's TASK_BOOTSTRAP_PORT slot via
+ * fork-inheritance. We don't have launchd-as-PID-1 yet, so the
+ * bootstrap server stores its receive port here once at startup;
+ * task_get_special_port(TASK_BOOTSTRAP_PORT) falls back to this slot
+ * when the calling task's itk_bootstrap is null. (Apple's
+ * host_special_ports.h leaves slot 13 unused — gap between LOCKD=12
+ * and SEATBELT=14 — so we claim it without collision.)
+ */
+#define HOST_BOOTSTRAP_PORT             (6 + HOST_MAX_SPECIAL_KERNEL_PORT)
 #define HOST_SEATBELT_PORT              (7 + HOST_MAX_SPECIAL_KERNEL_PORT)
 #define HOST_KEXTD_PORT                 (8 + HOST_MAX_SPECIAL_KERNEL_PORT)
 #define HOST_CHUD_PORT                  (9 + HOST_MAX_SPECIAL_KERNEL_PORT)

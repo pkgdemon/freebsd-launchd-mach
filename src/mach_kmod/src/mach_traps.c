@@ -81,6 +81,8 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/mach/mach_vm.h>
 #include <sys/mach/mach.h>
+#include <sys/mach/host.h>		/* realhost, host_lock */
+#include <sys/mach/host_special_ports.h>	/* HOST_BOOTSTRAP_PORT */
 
 
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -278,6 +280,56 @@ sys_task_set_special_port_trap(struct thread *td,
 	 * takes ownership of the send right we just copied in.
 	 */
 	td->td_retval[0] = task_set_special_port(task, uap->which, port);
+	return (0);
+}
+
+/*
+ * host_set_special_port — set a slot in realhost.special[]. Used by
+ * the freebsd-launchd-mach bootstrap server to publish its receive
+ * port as HOST_BOOTSTRAP_PORT host-wide. Only HOST_BOOTSTRAP_PORT is
+ * accepted for now; the kernel-provided slots (HOST_PORT,
+ * HOST_PRIV_PORT, HOST_IO_MASTER_PORT) and other Apple-defined slots
+ * are rejected.
+ *
+ * The `host` arg is accepted for Apple-canonical API compatibility
+ * but unused — we always touch &realhost (the local node's host).
+ */
+int
+sys_host_set_special_port_trap(struct thread *td,
+    struct host_set_special_port_trap_args *uap)
+{
+	task_t task = current_task();
+	ipc_port_t port = IP_NULL;
+	ipc_port_t old;
+	kern_return_t kr;
+
+	if (uap->which != HOST_BOOTSTRAP_PORT) {
+		td->td_retval[0] = KERN_INVALID_ARGUMENT;
+		return (0);
+	}
+	if (uap->which < 0 || uap->which > HOST_MAX_SPECIAL_PORT) {
+		td->td_retval[0] = KERN_INVALID_ARGUMENT;
+		return (0);
+	}
+
+	if (uap->port != 0) {
+		kr = ipc_object_copyin(task->itk_space, uap->port,
+		    MACH_MSG_TYPE_COPY_SEND, (ipc_object_t *)&port);
+		if (kr != KERN_SUCCESS) {
+			td->td_retval[0] = kr;
+			return (0);
+		}
+	}
+
+	host_lock(&realhost);
+	old = realhost.special[uap->which];
+	realhost.special[uap->which] = port;
+	host_unlock(&realhost);
+
+	if (IP_VALID(old))
+		ipc_port_release_send(old);
+
+	td->td_retval[0] = KERN_SUCCESS;
 	return (0);
 }
 
