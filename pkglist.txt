@@ -1,32 +1,43 @@
 # One pkg per line; lines starting with # are ignored.
 # Runtime packages — installed in the chroot and shipped in the ISO.
 #
-# Note: gershwin/GNUstep runtime deps (libxml2, icu, libffi) were removed
-# alongside the gershwin chroot build on 2026-05-12. Restore here when
-# libdispatch + GNUstep are brought back. See memory
-# freebsd_launchd_mach_gershwin_removed.
+# Currently empty — phase B test ISO ships only what pkglist-base.txt
+# provides plus mach.ko. The entries below are intentionally commented
+# out and to be restored in a future commit when the use cases come
+# back. Each block was dropped because the test scope didn't need it
+# and every byte counts on the cd9660.
+#
+# Also previously here (removed alongside the gershwin chroot build on
+# 2026-05-12, restore when libdispatch + GNUstep return — see memory
+# freebsd_launchd_mach_gershwin_removed): libxml2, icu, libffi.
 
-# ---- firmware blobs ----
-
+# ---- firmware blobs (restore for real-hardware drivers) ----
+#
 # GPU firmware blobs metaport — pulls all flavored gpu-firmware-*-kmod
 # subpackages.
-gpu-firmware-kmod
-
-# WiFi firmware blobs. Drivers themselves are in base.txz; firmware kmods
+#gpu-firmware-kmod
+#
+# WiFi firmware blobs. Drivers themselves are in base; firmware kmods
 # are loaded when matching hardware attaches.
-wifi-firmware-iwlwifi-kmod
-wifi-firmware-rtw88-kmod
-wifi-firmware-rtw89-kmod
+#wifi-firmware-iwlwifi-kmod
+#wifi-firmware-rtw88-kmod
+#wifi-firmware-rtw89-kmod
 
-# ---- hypervisor guest additions ----
+# ---- hypervisor guest additions (restore if running under VBox/VMware) ----
+#
+# vmware-checkvm and friends ship via open-vm-tools-nox11 and run on
+# every boot regardless of whether the host is VMware. Drop unless
+# you're actively using these hypervisors for testing.
+#virtualbox-ose-additions-nox11
+#open-vm-tools-nox11
 
-virtualbox-ose-additions-nox11
-open-vm-tools-nox11
-
-# ---- network ----
-
-# Network auto-config: dhcpcd in master mode.
-dhcpcd
-
-# Ports wpa_supplicant supersedes the base version.
-wpa_supplicant
+# ---- network (restore for runtime networking) ----
+#
+# Network auto-config: dhcpcd in master mode (port supersedes base
+# dhclient). Base /sbin/dhclient still works without this for the
+# default DHCP path.
+#dhcpcd
+#
+# Ports wpa_supplicant supersedes the base version (needed for any
+# encrypted WiFi network).
+#wpa_supplicant

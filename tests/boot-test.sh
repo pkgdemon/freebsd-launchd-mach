@@ -1,9 +1,8 @@
 #!/bin/sh
-# boot-test.sh — boot the live ISO in qemu and confirm the system reaches
-# multi-user mode by watching for /etc/rc's "Starting local daemons:"
-# marker on the serial console. That single marker proves the entire
-# pipeline worked: loader → kernel → cd9660 root mount → init →
-# init.sh's gunion + init_chroot pivot → multi-user boot in the chroot.
+# boot-test.sh — boot the live ISO in qemu, log in as root, and run the
+# Phase B smoke check (kldstat -m mach) interactively. Replaces the old
+# rc.local-emitted MACH-SMOKE marker so the test logic lives in CI
+# rather than baked into the ISO.
 
 set -eu
 
@@ -103,14 +102,45 @@ send "set boot_multicons=YES\r"
 expect "OK "
 send "boot\r"
 
-# Stage 1: wait for the Phase B mach.ko smoke marker emitted by
-# /etc/rc.local. By the time this fires, the boot pipeline has worked:
+# Stage 1: wait for the getty "login:" prompt. Boot is complete:
 # loader preloaded mach.ko -> kernel up -> /init.sh as PID 1 -> unionfs
-# pivot -> stock init in chroot -> rc multi-user sequence -> rc.local
-# ran kldstat -m mach. The marker proves mach.ko is loaded.
+# pivot -> stock init in chroot -> rc multi-user sequence -> getty.
 expect {
     timeout {
-        puts "\nFAIL: MACH-SMOKE-OK marker not seen within 8 minutes"
+        puts "\nFAIL: 'login:' prompt not seen within 8 minutes"
+        exit 1
+    }
+    "login:" { puts "\nOK: boot reached the login prompt" }
+}
+
+# Stage 2: log in as root. The live ISO has no root password, so login
+# either drops straight to the shell or asks "Password:" and accepts an
+# empty password. Both paths land at a shell prompt; failure is
+# "Login incorrect" or silence.
+send "root\r"
+expect {
+    timeout {
+        puts "\nFAIL: no response after sending root"
+        exit 1
+    }
+    "Password:" {
+        send "\r"
+        exp_continue
+    }
+    "Login incorrect" {
+        puts "\nFAIL: root login rejected"
+        exit 1
+    }
+    -re {[#%$] $} { puts "\nOK: at root shell prompt" }
+}
+
+# Stage 3: smoke-check that mach.ko is loaded. Replaces the rc.local
+# marker — test logic lives in CI now, not on the ISO. The shell
+# emits MACH-SMOKE-OK on success or MACH-SMOKE-FAIL on failure.
+send "kldstat -m mach >/dev/null 2>&1 && echo MACH-SMOKE-OK || echo MACH-SMOKE-FAIL\r"
+expect {
+    timeout {
+        puts "\nFAIL: smoke test command timed out"
         exit 1
     }
     "MACH-SMOKE-FAIL" {
@@ -120,27 +150,13 @@ expect {
     "MACH-SMOKE-OK" { puts "\nOK: mach.ko is loaded" }
 }
 
-# Stage 2: wait for the getty "login:" prompt. Boot is complete.
+# Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns
+# halt -p into a clean shutdown rather than a reset loop).
+send "halt -p\r"
 expect {
-    timeout {
-        puts "\nFAIL: 'login:' prompt not seen within 8 minutes"
-        exit 1
-    }
-    "login:" { puts "\nOK: boot reached the login prompt" }
-}
-
-# Stage 3: send "root" and confirm login(1) actually responds. Either
-# "Password:" (login asked, so login binary is alive — proves the post-
-# getty userland is intact) or a shell prompt (passwordless root login
-# succeeded — even better) is a pass. Silence is failure.
-send "root\r"
-expect {
-    timeout {
-        puts "\nFAIL: login(1) did not respond after sending 'root'"
-        exit 1
-    }
-    "Password:" { puts "OK: login(1) accepted username, requesting password" }
-    -re {[#%$] $} { puts "OK: passwordless root login succeeded; got shell prompt" }
+    timeout { puts "\nWARN: halt didn't complete within timeout" }
+    "Uptime:" { puts "\nOK: clean halt" }
+    eof       { puts "\nOK: VM exited" }
 }
 
 close
