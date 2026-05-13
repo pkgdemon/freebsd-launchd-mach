@@ -94,15 +94,28 @@ bootstrap_call(mach_port_t bp, uint32_t msg_id, const char *name,
 	bs_dbg("client: send id=0x%x bp=0x%x reply=0x%x name=%s\n",
 	    (unsigned)msg_id, (unsigned)bp, (unsigned)reply_port,
 	    name ? name : "(null)");
+
+	/*
+	 * Send and receive in separate mach_msg calls. The combined
+	 * MACH_SEND_MSG|MACH_RCV_MSG form reuses a single buffer for
+	 * both directions — the kernel writes the reply into the same
+	 * memory that held the request — which silently breaks if the
+	 * caller has separate request/reply structs. Splitting also
+	 * makes the two timeouts (send and receive) independent.
+	 */
 	mr = mach_msg((mach_msg_header_t *)&req,
-	    MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT |
-	        MACH_RCV_TIMEOUT,
-	    sizeof(req),
-	    sizeof(reply),
-	    reply_port,
-	    5000,	/* 5s — generous, server loop should reply much faster */
-	    MACH_PORT_NULL);
-	bs_dbg("client: mach_msg returned 0x%x bits=0x%x size=%u id=0x%x\n",
+	    MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+	    sizeof(req), 0, MACH_PORT_NULL,
+	    1000, MACH_PORT_NULL);
+	bs_dbg("client: send mach_msg returned 0x%x\n", (unsigned)mr);
+	if (mr != MACH_MSG_SUCCESS)
+		return ((kern_return_t)mr);
+
+	mr = mach_msg((mach_msg_header_t *)&reply,
+	    MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+	    0, sizeof(reply), reply_port,
+	    5000, MACH_PORT_NULL);
+	bs_dbg("client: recv mach_msg returned 0x%x bits=0x%x size=%u id=0x%x\n",
 	    (unsigned)mr, (unsigned)reply.msg.header.msgh_bits,
 	    (unsigned)reply.msg.header.msgh_size,
 	    (unsigned)reply.msg.header.msgh_id);

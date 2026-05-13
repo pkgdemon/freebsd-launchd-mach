@@ -118,6 +118,13 @@ main(void)
 		pthread_join(srv_thread, NULL);
 		return (5);
 	}
+	if (checkin_port == MACH_PORT_NULL) {
+		printf("FAIL: bootstrap_check_in returned KERN_SUCCESS but port "
+		    "is MACH_PORT_NULL (reply body not received?)\n");
+		server_stop = 1;
+		pthread_join(srv_thread, NULL);
+		return (5);
+	}
 	printf("bootstrap_check_in OK: port = 0x%x\n", checkin_port);
 
 	/* look_up: should return the SAME port name (single-task, server's
@@ -125,6 +132,13 @@ main(void)
 	kr = bootstrap_look_up(bp, "com.example.test", &lookup_port);
 	if (kr != KERN_SUCCESS) {
 		printf("FAIL: bootstrap_look_up: 0x%x\n", (unsigned)kr);
+		server_stop = 1;
+		pthread_join(srv_thread, NULL);
+		return (6);
+	}
+	if (lookup_port == MACH_PORT_NULL) {
+		printf("FAIL: bootstrap_look_up returned KERN_SUCCESS but port "
+		    "is MACH_PORT_NULL\n");
 		server_stop = 1;
 		pthread_join(srv_thread, NULL);
 		return (6);
