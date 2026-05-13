@@ -222,7 +222,7 @@ echo "==> building libsystem_kernel (src/libmach)"
 make -C "$ROOT/src/libmach" \
     DESTDIR="$WORK/rootfs" \
     PREFIX=/usr \
-    install
+    all install
 ls -lh "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
        "$WORK/rootfs/usr/include/mach/mach_traps.h" \
        "$WORK/rootfs/usr/libdata/pkgconfig/libsystem_kernel.pc"
