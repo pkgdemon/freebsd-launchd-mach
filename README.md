@@ -206,25 +206,62 @@ that held the request, and the test was vacuously comparing
 `0 == 0`. Now uses split `mach_msg(SEND)` + `mach_msg(RCV)` and
 asserts non-`MACH_PORT_NULL` ports in the test.
 
-**Next (Phase G2: real cross-process bootstrap server)** &mdash;
-three remaining steps:
+**Phase G2b (host-bootstrap-port fallback)** &mdash; *done.* mach.ko
+gained a HOST_BOOTSTRAP_PORT slot in `realhost.special[]`;
+`task_get_special_port(TASK_BOOTSTRAP_PORT)` falls back to it when
+the per-task `itk_bootstrap` slot is null. Bootstrap server calls
+`host_set_special_port(HOST_BOOTSTRAP_PORT, port)` once at startup
+to publish its port host-wide; every other process discovers it via
+`task_get_bootstrap_port`. Smoke marker: `HOST-BOOTSTRAP-OK`.
 
-1. **G2b: kernel-side global bootstrap-port fallback.** mach.ko
-   stores a single `ipc_port_t` (the host's bootstrap port). Modify
-   `task_get_special_port(TASK_BOOTSTRAP_PORT)` so when a task's
-   per-task `itk_bootstrap` slot is null, the kernel materializes a
-   send right from the global slot. New `host_set_special_port`
-   syscall lets the bootstrap server register the global port once
-   at startup. This is how every task discovers the daemon's port
-   without needing fork-inheritance or environment variables.
-2. **G2c: standalone `bootstrap_server` daemon binary.** Allocates
+This phase also forced an architectural pivot that affects everything
+going forward:
+
+**Mach trap multiplexer** &mdash; *done.* FreeBSD's `syscalls.master`
+reserves exactly 10 dynamic syscall slots (`lkmnosys` at 210-219).
+We&rsquo;ve used all 10 on foundational Mach traps; the
+launchd+configd+notifyd+asl port wants 20-30 more. FreeBSD&rsquo;s
+`RESERVED` slots (~48 of them) *cannot* be claimed via
+`kern_syscall_register` &mdash; the kernel only accepts slots whose
+`sy_call` is `lkmnosys` or `lkmressys`, and RESERVED slots use plain
+`nosys`. So we built a multiplexer dispatcher:
+
+- One FreeBSD syscall slot (219) hosts `sys_mach_trap_mux_trap`,
+  which switches on an op-number argument and dispatches to the
+  underlying Mach trap handler internally. Architecturally
+  identical to Apple&rsquo;s `mach_trap_table` &mdash; just routed
+  at the C handler level instead of in the assembly trampoline.
+- Op-numbers defined in `<mach/mach_traps_mux.h>`:
+  - `1` &nbsp;`host_set_special_port`
+  - `2` &nbsp;`task_set_special_port` (migrated off its former
+    dedicated slot 219 to free it for the multiplexer)
+- Future Mach traps (`mach_port_mod_refs`,
+  `mach_port_request_notification`, `mach_port_get_attributes`,
+  `task_threads`, the rest of the `mach_port_*member` family,
+  `vm_*`, `semaphore_*`, etc.) drop in as new op-numbers without
+  consuming any further FreeBSD syscall slots. The 9 hot dedicated
+  slots stay put because either they're called frequently
+  (`mach_msg_trap`, `mach_reply_port`, the `_self_trap` family) or
+  ABI-constrained (`mach_msg_trap` has a 7-arg shape that exceeds
+  the multiplexer&rsquo;s 5-arg budget).
+- Per-call overhead is ~5ns of dispatch (switch + function call) &mdash;
+  comfortably under 1% of trap-entry cost. Apple&rsquo;s
+  `mach_trap_table` validates the architectural pattern at scale.
+
+Audit plan documenting the trade space:
+[freebsd-mach-kmod-syscall-slots-spike](https://pkgdemon.github.io/freebsd-mach-kmod-syscall-slots-spike.html).
+
+**Next (Phase G2: complete the bootstrap server)** &mdash; two
+remaining steps:
+
+1. **G2c: standalone `bootstrap_server` daemon binary.** Allocates
    its service port, calls `host_set_special_port`, enters the
    existing `bootstrap_server_run` loop. Installed but *not* wired
    into `rc.local`: the bootstrap server's real home is as a
    launchd-managed job, which only happens once launchd is PID 1
    (a much later phase). Until then, the daemon is ephemeral &mdash;
    started by the test harness, killed after.
-3. **G2d: cross-process test.** `run.sh` launches the daemon in
+2. **G2d: cross-process test.** `run.sh` launches the daemon in
    the background, runs `test_bootstrap_remote` (a `fork`-based
    client that calls `task_get_bootstrap_port` and exercises
    check_in / look_up against the running daemon), kills the
