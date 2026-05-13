@@ -9,7 +9,6 @@
 #   produces:
 #     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so
 #     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so.0
-#     ${DESTDIR}/usr/include/mach/mach.h
 #     ${DESTDIR}/usr/include/mach/mach_traps.h
 #     ${DESTDIR}/usr/include/mach/mach_traps_mux.h
 #     ${DESTDIR}/usr/include/mach/mach_port.h
@@ -26,8 +25,16 @@ CFLAGS+=	-I${.CURDIR}/include
 NO_MAN=		yes
 WARNS?=		6
 
-INCS=		include/mach/mach.h \
-		include/mach/mach_traps.h \
+# <mach/mach.h> (the Apple-canonical umbrella header) is INTENTIONALLY
+# absent from INCS. libdispatch's source build auto-detects via
+# `__has_include(<mach/mach.h>)` and turns on HAVE_MACH if present,
+# which then pulls in Apple-internal types (mach_msg_overwrite,
+# mach_voucher_t, OS_NONNULL* attrs, dispatch_mig_callback_t, ...)
+# that our freebsd-launchd-mach stack doesn't provide. Installing
+# the umbrella before libdispatch builds breaks libdispatch's build.
+# build.sh installs <mach/mach.h> manually *after* libdispatch is
+# done (in the libxpc step) — same pattern as <servers/bootstrap.h>.
+INCS=		include/mach/mach_traps.h \
 		include/mach/mach_traps_mux.h \
 		include/mach/mach_port.h \
 		include/mach/message.h \

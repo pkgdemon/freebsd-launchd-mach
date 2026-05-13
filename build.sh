@@ -489,6 +489,15 @@ echo "==> libdispatch install verified"
 #       /usr/include/xpc/{activity,base,connection,debug,endpoint,
 #                         launchd,xpc}.h
 #
+# Install <mach/mach.h> umbrella header NOW — deliberately deferred
+# from libsystem_kernel's INCS install so it isn't present during the
+# libdispatch build (libdispatch's CMake __has_include(<mach/mach.h>)
+# detection would otherwise turn on HAVE_MACH and try to compile Apple-
+# internal Mach paths that don't exist in our stack).
+echo "==> installing <mach/mach.h> umbrella header"
+cp "$ROOT/src/libmach/include/mach/mach.h" \
+   "$WORK/rootfs/usr/include/mach/mach.h"
+
 echo "==> building libxpc (src/libxpc)"
 mkdir -p "$WORK/rootfs/usr/include/xpc"
 make -C "$ROOT/src/libxpc" \
