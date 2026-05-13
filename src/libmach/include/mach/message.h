@@ -146,6 +146,64 @@ typedef struct {
 
 #pragma pack()
 
+/*
+ * Mach trailers. Receivers can request the kernel append trailer
+ * elements to the received message via MACH_RCV_TRAILER_TYPE() and
+ * MACH_RCV_TRAILER_ELEMENTS() in the option bitmask. The trailer
+ * format/element type tuple selects which struct is appended; libxpc
+ * uses MACH_RCV_TRAILER_AUDIT to pull credentials off Mach IPC.
+ *
+ * NB: our kernel does not currently materialize audit trailers — the
+ * trailer struct fields will be zero — but Apple-source code that
+ * reads them still has to type-check at compile time.
+ */
+typedef unsigned int mach_msg_trailer_type_t;
+typedef unsigned int mach_msg_trailer_size_t;
+typedef unsigned int mach_port_seqno_t;
+typedef uint64_t     mach_port_context_t;
+
+#define MACH_MSG_TRAILER_FORMAT_0	0
+
+#define MACH_RCV_TRAILER_NULL		0
+#define MACH_RCV_TRAILER_SEQNO		1
+#define MACH_RCV_TRAILER_SENDER		2
+#define MACH_RCV_TRAILER_AUDIT		3
+#define MACH_RCV_TRAILER_CTX		4
+
+#define MACH_RCV_TRAILER_TYPE(x)	(((x) & 0xf) << 28)
+#define MACH_RCV_TRAILER_ELEMENTS(x)	(((x) & 0xf) << 24)
+
+typedef struct {
+	mach_msg_trailer_type_t		msgh_trailer_type;
+	mach_msg_trailer_size_t		msgh_trailer_size;
+} mach_msg_trailer_t;
+
+typedef struct {
+	unsigned int			val[2];
+} security_token_t;
+
+typedef struct {
+	mach_msg_trailer_type_t		msgh_trailer_type;
+	mach_msg_trailer_size_t		msgh_trailer_size;
+	mach_port_seqno_t		msgh_seqno;
+	security_token_t		msgh_sender;
+	audit_token_t			msgh_audit;
+} mach_msg_audit_trailer_t;
+
+/* Timeout sentinel for mach_msg(): wait forever. */
+#define MACH_MSG_TIMEOUT_NONE		((mach_msg_timeout_t)0)
+
+/*
+ * Boolean spellings — Apple Mach code uses TRUE/FALSE liberally; we
+ * provide them only if not already defined.
+ */
+#ifndef TRUE
+#define TRUE	1
+#endif
+#ifndef FALSE
+#define FALSE	0
+#endif
+
 mach_msg_return_t mach_msg(
     mach_msg_header_t *msg,
     mach_msg_option_t  option,
@@ -154,6 +212,49 @@ mach_msg_return_t mach_msg(
     mach_port_name_t   rcv_name,
     mach_msg_timeout_t timeout,
     mach_port_name_t   notify);
+
+/*
+ * mach_msg_send / mach_msg_receive — Apple's thin convenience wrappers
+ * around mach_msg(). Inline so we don't add new exported symbols to
+ * libsystem_kernel; matches Apple's xnu/libsyscall implementations.
+ */
+static __inline mach_msg_return_t
+mach_msg_send(mach_msg_header_t *msg)
+{
+	return mach_msg(msg, MACH_SEND_MSG, msg->msgh_size, 0,
+	    MACH_PORT_NULL, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+}
+
+static __inline mach_msg_return_t
+mach_msg_receive(mach_msg_header_t *msg)
+{
+	return mach_msg(msg, MACH_RCV_MSG, 0, msg->msgh_size,
+	    msg->msgh_local_port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+}
+
+/*
+ * kern_return_t — also lives in <mach/mach_port.h>, but message.h
+ * needs it for mig_reply_error_t. <mach/mach_port.h> includes us, so
+ * we can't pull in mach_port.h without a cycle. Define here with a
+ * guard so mach_port.h's redefinition is suppressed when it follows.
+ */
+#ifndef _KERN_RETURN_T_DEFINED
+#define _KERN_RETURN_T_DEFINED
+typedef int kern_return_t;
+#endif
+
+/*
+ * mig_reply_error_t — wire layout of a MIG-generated stub's reply on
+ * the error path. libxpc inspects this in xpc_pipe_try_receive() to
+ * decide whether to forward a reply or drop a "no reply" sentinel.
+ */
+typedef struct {
+	mach_msg_header_t	Head;
+	int			NDR;	/* unused on FreeBSD — MIG NDR header */
+	kern_return_t		RetCode;
+} mig_reply_error_t;
+
+#define MIG_NO_REPLY		-305	/* matches Apple's mig_errors.h */
 
 #ifdef __cplusplus
 }

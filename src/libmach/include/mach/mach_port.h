@@ -22,7 +22,10 @@
 extern "C" {
 #endif
 
+#ifndef _KERN_RETURN_T_DEFINED
+#define _KERN_RETURN_T_DEFINED
 typedef int kern_return_t;
+#endif
 typedef unsigned int mach_port_right_t;
 /* mach_msg_type_name_t is now declared in <mach/message.h> so that
  * <mach/message.h> can use it standalone (mach_msg_port_descriptor_t
@@ -32,8 +35,9 @@ typedef unsigned int mach_port_right_t;
  * <sys/mach/kern_return.h> on the kernel side. */
 #define KERN_SUCCESS              0
 #define KERN_INVALID_ARGUMENT     4
-#define KERN_RESOURCE_SHORTAGE    6
 #define KERN_FAILURE              5
+#define KERN_RESOURCE_SHORTAGE    6
+#define KERN_INVALID_TASK         16	/* matches <sys/mach/kern_return.h> */
 
 /* mach_port_right_t values (matches <sys/mach/port.h>). */
 #define MACH_PORT_RIGHT_SEND        ((mach_port_right_t)0)
