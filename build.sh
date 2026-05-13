@@ -202,28 +202,11 @@ echo "==> building mach.ko"
 ls -lh "$WORK/rootfs/boot/kernel/mach.ko"
 
 #
-# 4. trim rootfs of things not needed at runtime
-#
-echo "==> slimming rootfs"
-rm -rf \
-    "$WORK/rootfs/usr/share/man" \
-    "$WORK/rootfs/usr/share/doc" \
-    "$WORK/rootfs/usr/share/info" \
-    "$WORK/rootfs/usr/share/locale" \
-    "$WORK/rootfs/usr/share/games" \
-    "$WORK/rootfs/usr/share/examples" \
-    "$WORK/rootfs/usr/share/openssl" \
-    "$WORK/rootfs/usr/share/dict" \
-    "$WORK/rootfs/usr/share/calendar" \
-    "$WORK/rootfs/usr/include" \
-    "$WORK/rootfs/usr/tests" \
-    "$WORK/rootfs/usr/lib/debug" \
-    "$WORK/rootfs/usr/libdata/lint" \
-    "$WORK/rootfs/var/db/etcupdate"
-find "$WORK/rootfs/boot/kernel" -name '*.symbols' -delete 2>/dev/null || true
-
-#
-# 5. apply local overlays (etc/rc.conf, etc/motd.template, ...)
+# 4. apply local overlays (etc/rc.conf, etc/motd.template,
+#    /usr/tests/freebsd-launchd-mach/, ...). No "slim" rm -rf step:
+#    pkg curation owns rootfs content end-to-end. If something
+#    unwanted shows up, drop the pkg from pkglist-base.txt rather
+#    than deleting files post-install.
 #
 if [ -d "$ROOT/overlays" ]; then
     echo "==> applying overlays"
