@@ -84,6 +84,14 @@ if [ "$$" = "1" ]; then
     # which chroots and execs /sbin/init (still PID 1). init inherits.
     # Standard FreeBSD multi-user boot proceeds from there.
     #
+    # Forward "$@" to /sbin/init so loader-time flags survive the pivot.
+    # When the user types `boot -s` at the loader prompt, the kernel
+    # appends "-s" to init's argv. Via shebang resolution, that lands
+    # as $1 of this script. Without forwarding, the chroot'd init sees
+    # empty argv, ignores RB_SINGLE, and boots multi-user despite the
+    # request. Same forwarding handles -d (init dialog), -r (read-only
+    # root retry), -f (fast boot — skip fsck), etc.
+    #
     # Unset init_script / init_shell kenvs first: stock /sbin/init reads
     # init_script at startup and forks a child to run it. If the kenv is
     # still set to "/init.sh" (from loader.conf) when we exec init in the
@@ -95,7 +103,7 @@ if [ "$$" = "1" ]; then
     # launchd is in the build.
     kenv -u init_script 2>/dev/null || true
     kenv -u init_shell  2>/dev/null || true
-    exec /rescue/chroot /sysroot /sbin/init
+    exec /rescue/chroot /sysroot /sbin/init "$@"
 fi
 
 # Fallback path: we're a child of /rescue/init via init_script. Set
