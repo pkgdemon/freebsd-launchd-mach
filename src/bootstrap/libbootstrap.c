@@ -259,16 +259,21 @@ bootstrap_server_run(mach_port_t service_port, volatile int *stop)
 
 		memset(&reply, 0, sizeof(reply));
 		/*
-		 * Reply goes back to the client's reply port, which is in
-		 * msgh_local_port of the request (the kernel translated
-		 * the client's MAKE_SEND_ONCE into a real send-once-right
-		 * to that port). Use MOVE_SEND_ONCE so we consume the
-		 * right exactly once on send.
+		 * On receive Mach swaps remote/local: msgh_remote_port is
+		 * the reply target (the kernel-manufactured send-once right
+		 * from the client's MAKE_SEND_ONCE), msgh_local_port is the
+		 * port we received on (our service port). The reply's
+		 * destination is therefore the request's *remote* port —
+		 * had this backwards in the first cut and got
+		 * MACH_SEND_INVALID_DEST (0x10000003) because the service
+		 * port doesn't have a send-once right.
+		 *
+		 * MOVE_SEND_ONCE consumes the right exactly once on send.
 		 */
 		reply.header.msgh_bits =
 		    MACH_MSGH_BITS(MACH_MSG_TYPE_MOVE_SEND_ONCE, 0);
 		reply.header.msgh_size = sizeof(reply);
-		reply.header.msgh_remote_port = req.msg.header.msgh_local_port;
+		reply.header.msgh_remote_port = req.msg.header.msgh_remote_port;
 		reply.header.msgh_local_port  = MACH_PORT_NULL;
 		reply.header.msgh_id          = reply_id;
 		reply.result = kr;
