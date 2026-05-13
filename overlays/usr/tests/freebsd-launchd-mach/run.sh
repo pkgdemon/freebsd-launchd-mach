@@ -151,14 +151,20 @@ fi
 # per-task bootstrap slot set, so task_get_bootstrap_port falls
 # back to the host slot the daemon populated. check_in / look_up
 # round-trip over real cross-task Mach IPC validates the complex
-# port-descriptor path G2a added. trap-on-exit kills the daemon
-# regardless of test outcome so we don't leak it into the next
-# test.
+# port-descriptor path G2a added.
+#
+# Cleanup uses SIGKILL (not SIGTERM) deliberately: the daemon's
+# SIGTERM-driven graceful-exit path stalls during host_set_special_port
+# /mach_port_deallocate on the live ISO (likely because the kernel
+# port cleanup races with our process-exit teardown — debug later).
+# SIGKILL forces immediate exit and doesn't rely on `wait` returning.
+# No `wait` follows: reaping is left to init at script exit, which
+# is fine for a smoke test that doesn't reuse the PID.
 if [ -x /usr/local/sbin/bootstrap_server ] && \
    [ -x /usr/tests/freebsd-launchd-mach/test_bootstrap_remote ]; then
     /usr/local/sbin/bootstrap_server &
     BOOTSTRAP_PID=$!
-    trap 'kill $BOOTSTRAP_PID 2>/dev/null; wait $BOOTSTRAP_PID 2>/dev/null' EXIT INT TERM
+    trap 'kill -KILL $BOOTSTRAP_PID 2>/dev/null' EXIT INT TERM
     # Give the daemon a beat to allocate its port + register host slot.
     sleep 1
     if /usr/tests/freebsd-launchd-mach/test_bootstrap_remote; then
@@ -166,13 +172,11 @@ if [ -x /usr/local/sbin/bootstrap_server ] && \
     else
         rc=$?
         echo "BOOTSTRAP-REMOTE-FAIL: test_bootstrap_remote exit=$rc"
-        kill $BOOTSTRAP_PID 2>/dev/null || true
-        wait $BOOTSTRAP_PID 2>/dev/null || true
+        kill -KILL $BOOTSTRAP_PID 2>/dev/null || true
         trap - EXIT INT TERM
         exit 1
     fi
-    kill $BOOTSTRAP_PID 2>/dev/null || true
-    wait $BOOTSTRAP_PID 2>/dev/null || true
+    kill -KILL $BOOTSTRAP_PID 2>/dev/null || true
     trap - EXIT INT TERM
 else
     echo "BOOTSTRAP-REMOTE-FAIL: bootstrap_server or test_bootstrap_remote binary not installed"
