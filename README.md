@@ -137,33 +137,45 @@ port, 0, q)` returns a live source backed by:
   CI marker, stronger meaning.
 - CI smoke at this checkpoint: still 4/4 markers green on the live ISO.
 
-**Next** &mdash; implement libdispatch's `dispatch_mach_t` channel API
-(or the subset libxpc needs) on top of the Phase E foundation, *then*
-libxpc. Phase E only delivered `DISPATCH_SOURCE_TYPE_MACH_RECV` (a
-single source type) plus link-only stubs for SEND / `_dispatch_mach_
-type_*` / `_dispatch_xpc_type_sigterm`. libxpc doesn't use those types
-directly &mdash; it uses the higher-level **channel** API
-(`dispatch_mach_create` / `dispatch_mach_connect` / `dispatch_mach_send`
-/ `dispatch_mach_msg_create` / etc.) which lives in libdispatch's
-`src/mach.c` (~3,250 LOC, all gated on `HAVE_MACH`) and `src/voucher.c`
-and is currently absent from our build entirely &mdash; not even the
-function symbols exist, since the file isn't compiled. So:
+**Next** &mdash; port libxpc on top of the Phase E foundation. The
+ravynOS-fork libxpc (`lib/libxpc/` in their tree) uses a deliberately
+small Mach surface that maps cleanly onto what we already have:
 
-1. **Channel API port.** Either enable `HAVE_MACH` and shim the
-   missing Apple bits (`mach_port_construct`, vouchers, MIG, etc.),
-   or implement a non-`HAVE_MACH` subset of `src/mach.c` on top of
-   our polling-thread RECV + libsystem_kernel `mach_msg`. Wire up
-   the SEND-side notifications (`MACH_NOTIFY_NO_SENDERS`,
-   `MACH_NOTIFY_DEAD_NAME`) the Apple `dispatch_mach_t` state
-   machine expects.
-2. **Bootstrap server** for service-name lookup (a small daemon
-   that maps `com.apple.foo` &harr; mach port; everything else asks
-   it for service ports at connect time).
-3. **libxpc itself**, on top of (1) + (2).
+- `DISPATCH_SOURCE_TYPE_MACH_RECV` &mdash; the only libdispatch Mach
+  source type it touches. Done in Phase E.
+- Raw `mach_msg(MACH_SEND_MSG/MACH_RCV_MSG, ...)` via
+  libsystem_kernel. Done in Phase C3.
+- `mach_port_allocate`, `mach_port_insert_right`,
+  `mach_port_deallocate` &mdash; three port-management calls we
+  don't have yet. Wire them as new mach.ko-registered syscalls and
+  expose them through libsystem_kernel (same pattern as the C1
+  `mach_reply_port` family).
+- `bootstrap_check_in` / `bootstrap_look_up` against a
+  `bootstrap_port` global &mdash; needs a bootstrap server (a small
+  daemon that maps service names to mach ports; everything else
+  asks it for service ports at connect time).
 
-Plan docs (some predate the Phase E findings &mdash; the original
-"Phase 0" was scoped narrower than what `dispatch_mach_t` actually
-demands):
+So the next-step sequencing is:
+
+1. **Three new port-management syscalls** in mach.ko +
+   libsystem_kernel (`mach_port_allocate` /
+   `mach_port_insert_right` / `mach_port_deallocate`). Small, same
+   shape as the four traps we already wired.
+2. **Bootstrap server** (`bootstrap_check_in` /
+   `bootstrap_look_up`).
+3. **Fork ravynOS's `lib/libxpc/` into this repo**, build it
+   against our libsystem_kernel + libdispatch + the new
+   port-management calls. Smoke marker: `LIBXPC-OK`.
+
+The high-level `dispatch_mach_t` channel API in libdispatch's
+`src/mach.c` (~3,250 LOC, gated on `HAVE_MACH`) is *not* on the
+critical path &mdash; ravynOS libxpc deliberately reaches for the
+lower-level primitives instead. The channel API only comes back if
+we later want to support Apple-source consumers that use it directly
+(e.g., specific Apple frameworks); none of our current Phase F-G
+targets do.
+
+Plan docs:
 
 - [**`freebsd-libxpc-plan`**](https://pkgdemon.github.io/freebsd-libxpc-plan.html)
   &mdash; phased porting plan for libxpc on top of mach.ko. Phase 0 was
