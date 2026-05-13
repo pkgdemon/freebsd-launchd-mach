@@ -27,3 +27,10 @@ FreeBSD-libcompat-dev
 FreeBSD-libexecinfo-dev
 FreeBSD-pam-dev
 FreeBSD-openssl-dev
+
+# Required for libdispatch's compile path: FreeBSD's own
+# /usr/include/sys/ucred.h #includes <bsm/audit.h>, so anything that
+# transitively pulls <sys/mount.h> needs the audit headers. We curated
+# FreeBSD-audit out of the runtime set; the -dev variant lives here so
+# headers are present at build time, then purged before mkuzip.
+FreeBSD-audit-dev
