@@ -187,6 +187,17 @@ expect {
 }
 expect {
     timeout {
+        puts "\nFAIL: BOOTSTRAP marker not seen"
+        exit 1
+    }
+    "BOOTSTRAP-FAIL" {
+        puts "\nFAIL: bootstrap protocol round-trip failed"
+        exit 1
+    }
+    "BOOTSTRAP-OK" { puts "\nOK: bootstrap protocol round-trip works" }
+}
+expect {
+    timeout {
         puts "\nFAIL: LIBDISPATCH marker not seen"
         exit 1
     }

@@ -259,6 +259,32 @@ cc -I"$WORK/rootfs/usr/include" \
    -lsystem_kernel
 ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_task_special_port"
 
+# Install <servers/bootstrap.h> public header. libsystem_kernel's
+# Makefile installs everything else under /usr/include/mach/; the
+# bootstrap header sits at /usr/include/servers/bootstrap.h per
+# Apple convention. Do it by hand here rather than wrestling with
+# bsd.lib.mk INCS_GRP plumbing.
+echo "==> installing <servers/bootstrap.h>"
+mkdir -p "$WORK/rootfs/usr/include/servers"
+cp "$ROOT/src/libmach/include/servers/bootstrap.h" \
+   "$WORK/rootfs/usr/include/servers/bootstrap.h"
+
+# test_bootstrap — Phase G1 single-task validation of the bootstrap
+# protocol (check_in / look_up round-trip via libbootstrap +
+# bootstrap_server_run in a pthread). libbootstrap.c is linked
+# statically into the test binary for now; Phase G2 promotes it to
+# a real /usr/lib/libsystem/libbootstrap.so once the daemon lands.
+echo "==> building test_bootstrap"
+cc -I"$WORK/rootfs/usr/include" \
+   -I"$ROOT/src/bootstrap" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap" \
+   "$ROOT/src/bootstrap/tests/test_bootstrap.c" \
+   "$ROOT/src/bootstrap/libbootstrap.c" \
+   -lsystem_kernel -lpthread
+ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap"
+
 #
 # 3e. verify: assert install shape + ldconfig resolution + ldd resolves
 #     the test binary's libsystem_kernel.so.0 dep. Build fails fast here

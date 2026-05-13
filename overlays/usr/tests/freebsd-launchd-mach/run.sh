@@ -84,6 +84,26 @@ else
     exit 1
 fi
 
+# 2d. userland: bootstrap protocol round-trip (Phase G1). Hand-rolled
+# message-ID server loop dispatching CHECK_IN / LOOK_UP requests over
+# Mach IPC. The test spawns a pthread that runs bootstrap_server_run,
+# then from the main thread does check_in("com.example.test") followed
+# by look_up of the same name and asserts the returned port matches.
+# Single-task only — cross-process needs complex-message port
+# descriptors, lands in Phase G2 alongside the daemon.
+if [ -x /usr/tests/freebsd-launchd-mach/test_bootstrap ]; then
+    if /usr/tests/freebsd-launchd-mach/test_bootstrap; then
+        echo "BOOTSTRAP-OK: bootstrap protocol round-trip succeeded"
+    else
+        rc=$?
+        echo "BOOTSTRAP-FAIL: test_bootstrap exit=$rc"
+        exit 1
+    fi
+else
+    echo "BOOTSTRAP-FAIL: test_bootstrap binary not installed"
+    exit 1
+fi
+
 # 3. userland: libdispatch loads + serial queue executes a sync callback.
 # Baseline check that the vendored swift-corelibs-libdispatch (built
 # in our chroot pipeline, installed to /usr/lib/libsystem/) is loadable
