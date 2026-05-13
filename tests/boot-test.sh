@@ -135,9 +135,11 @@ expect {
 }
 
 # Stage 3: invoke the on-ISO mach smoke test. Test scripts live under
-# /usr/tests/<component>/ following the FreeBSD convention. Each
-# prints MACH-SMOKE-OK or MACH-SMOKE-FAIL on its own line; CI matches
-# either marker.
+# /usr/tests/<component>/ following the FreeBSD convention. The script
+# emits two markers in sequence:
+#   MACH-SMOKE-OK / MACH-SMOKE-FAIL          — kernel-side kldstat -m mach
+#   LIBSYSTEM-KERNEL-OK / LIBSYSTEM-KERNEL-FAIL — userland test_libmach
+# Both must pass.
 send "/usr/tests/freebsd-launchd-mach/run.sh\r"
 expect {
     timeout {
@@ -149,6 +151,17 @@ expect {
         exit 1
     }
     "MACH-SMOKE-OK" { puts "\nOK: mach.ko is loaded" }
+}
+expect {
+    timeout {
+        puts "\nFAIL: LIBSYSTEM-KERNEL marker not seen"
+        exit 1
+    }
+    "LIBSYSTEM-KERNEL-FAIL" {
+        puts "\nFAIL: libsystem_kernel roundtrip failed"
+        exit 1
+    }
+    "LIBSYSTEM-KERNEL-OK" { puts "\nOK: libsystem_kernel works" }
 }
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns

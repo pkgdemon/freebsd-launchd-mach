@@ -1,18 +1,20 @@
 /*
- * test_libmach — exercise each libmach entry point and print results.
+ * test_libmach — exercise each libsystem_kernel entry point and assert
+ * non-NULL ports.
  *
  * Usage: ./test_libmach
  *
- * Prints one line per call:
- *   mach_reply_port  = 0x...
- *   mach_task_self   = 0x...
- *   mach_thread_self = 0x...
- *   mach_host_self   = 0x...
+ * Prints one line per call (for diagnostic visibility), then asserts
+ * every port is non-NULL. Post-Phase-C2 lazy Mach init, every process
+ * gets a valid task / thread / host / reply port on first request, so
+ * MACH_PORT_NULL from any of these is a real failure.
  *
- * Exit code 0 always — interpretation is up to the smoke harness.
- * A return of MACH_PORT_NULL (0) is valid for processes that pre-date
- * mach.ko's load (NULL-guard wrapper returns MACH_PORT_NULL by design;
- * lazy Mach init in Phase C2 will fix that).
+ * Exit codes:
+ *   0 — all four traps returned valid ports
+ *   1 — mach_task_self()    returned MACH_PORT_NULL
+ *   2 — mach_thread_self()  returned MACH_PORT_NULL
+ *   3 — mach_host_self()    returned MACH_PORT_NULL
+ *   4 — mach_reply_port()   returned MACH_PORT_NULL
  */
 #include <stdio.h>
 #include <mach/mach_traps.h>
@@ -20,9 +22,19 @@
 int
 main(void)
 {
-	printf("mach_reply_port  = 0x%x\n", mach_reply_port());
-	printf("mach_task_self   = 0x%x\n", mach_task_self());
-	printf("mach_thread_self = 0x%x\n", mach_thread_self());
-	printf("mach_host_self   = 0x%x\n", mach_host_self());
-	return (0);
+	mach_port_name_t task   = mach_task_self();
+	mach_port_name_t thread = mach_thread_self();
+	mach_port_name_t host   = mach_host_self();
+	mach_port_name_t reply  = mach_reply_port();
+
+	printf("mach_task_self   = 0x%x\n", task);
+	printf("mach_thread_self = 0x%x\n", thread);
+	printf("mach_host_self   = 0x%x\n", host);
+	printf("mach_reply_port  = 0x%x\n", reply);
+
+	if (task   == MACH_PORT_NULL) return 1;
+	if (thread == MACH_PORT_NULL) return 2;
+	if (host   == MACH_PORT_NULL) return 3;
+	if (reply  == MACH_PORT_NULL) return 4;
+	return 0;
 }

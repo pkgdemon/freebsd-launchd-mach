@@ -212,6 +212,69 @@ echo "==> building mach.ko"
 ls -lh "$WORK/rootfs/boot/kernel/mach.ko"
 
 #
+# 3c. build libsystem_kernel (formerly libmach) on the host and install
+#     it into the chroot under the spike's chosen Apple-Libsystem layout:
+#       /usr/lib/libsystem/libsystem_kernel.so + .so.0 sonname symlink
+#       /usr/include/mach/mach_traps.h
+#       /usr/libdata/pkgconfig/libsystem_kernel.pc
+#
+echo "==> building libsystem_kernel (src/libmach)"
+make -C "$ROOT/src/libmach" \
+    DESTDIR="$WORK/rootfs" \
+    PREFIX=/usr \
+    install
+ls -lh "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
+       "$WORK/rootfs/usr/include/mach/mach_traps.h" \
+       "$WORK/rootfs/usr/libdata/pkgconfig/libsystem_kernel.pc"
+
+# ldconfig hint so rtld finds libsystem_kernel.so at runtime. Two parts:
+# (a) drop-in file at /usr/local/libdata/ldconfig/freebsd-launchd-mach
+#     so /etc/rc.d/ldconfig at boot adds /usr/lib/libsystem to hints.
+# (b) ldconfig -m primes /var/run/ld-elf.so.hints inside rootfs.uzip
+#     so the live ISO boots with hints already correct under launchd.
+echo "==> writing ldconfig hint for /usr/lib/libsystem"
+mkdir -p "$WORK/rootfs/usr/local/libdata/ldconfig"
+echo "/usr/lib/libsystem" \
+    > "$WORK/rootfs/usr/local/libdata/ldconfig/freebsd-launchd-mach"
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+
+#
+# 3d. build the libsystem_kernel smoke test binary, install to
+#     /usr/tests/freebsd-launchd-mach/test_libmach. CI's run.sh invokes
+#     it post-login to verify rtld resolution + Mach roundtrip.
+#
+echo "==> building test_libmach"
+mkdir -p "$WORK/rootfs/usr/tests/freebsd-launchd-mach"
+cc -I"$WORK/rootfs/usr/include" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libmach" \
+   "$ROOT/src/mach_kmod/tests/test_libmach.c" \
+   -lsystem_kernel
+ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libmach"
+
+#
+# 3e. verify: assert install shape + ldconfig resolution + ldd resolves
+#     the test binary's libsystem_kernel.so.0 dep. Build fails fast here
+#     instead of producing a broken ISO.
+#
+echo "==> verifying libsystem_kernel install"
+test -f "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
+    || { echo "FAIL: libsystem_kernel.so missing"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so.0" \
+    || { echo "FAIL: libsystem_kernel.so.0 sonname symlink missing"; exit 1; }
+test -f "$WORK/rootfs/usr/local/libdata/ldconfig/freebsd-launchd-mach" \
+    || { echo "FAIL: ldconfig drop-in missing"; exit 1; }
+test ! -e "$WORK/rootfs/usr/local/lib/libmach.so" \
+    || { echo "FAIL: old /usr/local/lib/libmach.so still present"; exit 1; }
+chroot "$WORK/rootfs" ldconfig -r | grep -q libsystem_kernel \
+    || { echo "FAIL: ldconfig hints missing libsystem_kernel"; exit 1; }
+chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libmach \
+    | grep -q "libsystem_kernel.so.0 => /usr/lib/libsystem/" \
+    || { echo "FAIL: ldd doesn't resolve test_libmach to /usr/lib/libsystem/"; exit 1; }
+echo "==> libsystem_kernel install verified"
+
+#
 # 4. apply local overlays (etc/rc.conf, etc/motd.template,
 #    /usr/tests/freebsd-launchd-mach/, ...). No "slim" rm -rf step:
 #    pkg curation owns rootfs content end-to-end. If something
