@@ -396,7 +396,17 @@ xpc_uuid_create(const uuid_t uuid)
 {
 	xpc_u val;
 
-	memcpy(val.uuid, uuid, sizeof(uuid_t));
+	/*
+	 * FreeBSD's uuid_t is `struct uuid` (16 bytes), passed by value;
+	 * Apple's uuid_t is `unsigned char[16]`, which decays to a pointer
+	 * in this parameter slot. The original ravynOS code wrote
+	 * `memcpy(val.uuid, uuid, sizeof(uuid_t))` which is Apple-shape and
+	 * fails to compile against FreeBSD <uuid.h>. Take the address of
+	 * both so the same memcpy works regardless of shape — on FreeBSD
+	 * `&val.uuid` and `&uuid` are both `struct uuid *`; on Apple they
+	 * are both `unsigned char (*)[16]` which decays compatibly.
+	 */
+	memcpy(&val.uuid, &uuid, sizeof(uuid_t));
 	return _xpc_prim_create(_XPC_TYPE_UUID, val, 1);
 }
 
