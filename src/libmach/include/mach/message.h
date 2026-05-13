@@ -9,6 +9,7 @@
 #ifndef _MACH_MESSAGE_H_
 #define _MACH_MESSAGE_H_
 
+#include <stdint.h>		/* uint16_t for mach_msg_port_descriptor_t */
 #include <mach/mach_traps.h>	/* mach_port_name_t, MACH_PORT_NULL */
 
 #ifdef __cplusplus
