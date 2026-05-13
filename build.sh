@@ -265,10 +265,14 @@ ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libmach"
 #     instead of producing a broken ISO.
 #
 echo "==> verifying libsystem_kernel install"
-test -f "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
-    || { echo "FAIL: libsystem_kernel.so missing"; exit 1; }
-test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so.0" \
-    || { echo "FAIL: libsystem_kernel.so.0 sonname symlink missing"; exit 1; }
+ls -la "$WORK/rootfs/usr/lib/libsystem/" || true
+# bsd.lib.mk installs .so.0 as the regular file (the actual library
+# binary) and .so as the dev-time symlink pointing to it. Verify both
+# shapes correctly.
+test -f "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so.0" \
+    || { echo "FAIL: libsystem_kernel.so.0 (the library binary) missing"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
+    || { echo "FAIL: libsystem_kernel.so (dev symlink to .so.0) missing"; exit 1; }
 test -f "$WORK/rootfs/usr/local/libdata/ldconfig/freebsd-launchd-mach" \
     || { echo "FAIL: ldconfig drop-in missing"; exit 1; }
 test ! -e "$WORK/rootfs/usr/local/lib/libmach.so" \
