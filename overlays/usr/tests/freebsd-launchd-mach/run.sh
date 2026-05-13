@@ -123,27 +123,6 @@ else
     exit 1
 fi
 
-# 3. userland: libdispatch loads + serial queue executes a sync callback.
-# Baseline check that the vendored swift-corelibs-libdispatch (built
-# in our chroot pipeline, installed to /usr/lib/libsystem/) is loadable
-# via rtld and dispatches a function-pointer callback correctly. The
-# Mach IPC backend test (DISPATCH_SOURCE_TYPE_MACH_RECV) lands in a
-# follow-up commit once event_mach_freebsd.c is wired in.
-if [ -x /usr/tests/freebsd-launchd-mach/test_libdispatch ]; then
-    if /usr/tests/freebsd-launchd-mach/test_libdispatch; then
-        echo "LIBDISPATCH-OK: libdispatch baseline roundtrip succeeded"
-    else
-        rc=$?
-        echo "LIBDISPATCH-FAIL: test_libdispatch exit=$rc"
-        echo "ldd:"
-        ldd /usr/tests/freebsd-launchd-mach/test_libdispatch 2>&1 || true
-        exit 1
-    fi
-else
-    echo "LIBDISPATCH-FAIL: test_libdispatch binary not installed"
-    exit 1
-fi
-
 # 2e. cross-process bootstrap (Phase G2d). Starts the standalone
 # bootstrap_server daemon in the background; it publishes its
 # service port as HOST_BOOTSTRAP_PORT host-wide. Then runs
@@ -180,6 +159,27 @@ if [ -x /usr/local/sbin/bootstrap_server ] && \
     trap - EXIT INT TERM
 else
     echo "BOOTSTRAP-REMOTE-FAIL: bootstrap_server or test_bootstrap_remote binary not installed"
+    exit 1
+fi
+
+# 3. userland: libdispatch loads + serial queue executes a sync callback.
+# Baseline check that the vendored swift-corelibs-libdispatch (built
+# in our chroot pipeline, installed to /usr/lib/libsystem/) is loadable
+# via rtld and dispatches a function-pointer callback correctly. The
+# Mach IPC backend test (DISPATCH_SOURCE_TYPE_MACH_RECV) lands in a
+# follow-up commit once event_mach_freebsd.c is wired in.
+if [ -x /usr/tests/freebsd-launchd-mach/test_libdispatch ]; then
+    if /usr/tests/freebsd-launchd-mach/test_libdispatch; then
+        echo "LIBDISPATCH-OK: libdispatch baseline roundtrip succeeded"
+    else
+        rc=$?
+        echo "LIBDISPATCH-FAIL: test_libdispatch exit=$rc"
+        echo "ldd:"
+        ldd /usr/tests/freebsd-launchd-mach/test_libdispatch 2>&1 || true
+        exit 1
+    fi
+else
+    echo "LIBDISPATCH-FAIL: test_libdispatch binary not installed"
     exit 1
 fi
 
