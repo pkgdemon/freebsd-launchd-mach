@@ -25,6 +25,32 @@ typedef int          mach_msg_return_t;
 typedef mach_port_name_t mach_port_t;
 typedef unsigned char mach_msg_type_name_t;	/* port-right disposition */
 
+/*
+ * boolean_t — Apple uses it pervasively in Mach APIs. On macOS it
+ * lives in <mach/boolean.h>; we inline the typedef here so any
+ * Apple-source consumer that #includes <mach/message.h> picks it
+ * up. Matches Apple's `typedef unsigned int boolean_t`.
+ */
+#ifndef _BOOLEAN_T_DEFINED
+#define _BOOLEAN_T_DEFINED
+typedef unsigned int boolean_t;
+#endif
+
+/*
+ * audit_token_t — opaque BSM credential token used by Mach trailers
+ * and by libxpc's xpc_connection_set_credentials() /
+ * xpc_dictionary_get_audit_token(). Apple defines it in <bsm/audit.h>
+ * via <mach/message.h>; we inline the typedef here for the same
+ * reason. Internal representation must not be inspected directly;
+ * audit_token_to_au32() is the canonical accessor.
+ */
+#ifndef _AUDIT_TOKEN_T_DEFINED
+#define _AUDIT_TOKEN_T_DEFINED
+typedef struct {
+	unsigned int val[8];
+} audit_token_t;
+#endif
+
 typedef struct {
 	mach_msg_bits_t   msgh_bits;
 	mach_msg_size_t   msgh_size;
