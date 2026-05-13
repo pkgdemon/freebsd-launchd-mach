@@ -54,6 +54,7 @@ struct _kernelrpc_mach_port_deallocate_trap_args;
 struct _kernelrpc_mach_port_insert_right_trap_args;
 struct task_get_special_port_trap_args;
 struct task_set_special_port_trap_args;
+struct mach_trap_mux_trap_args;
 
 SYSCTL_DECL(_mach);
 static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
@@ -85,6 +86,8 @@ int sys_task_get_special_port_trap(struct thread *,
     struct task_get_special_port_trap_args *);
 int sys_task_set_special_port_trap(struct thread *,
     struct task_set_special_port_trap_args *);
+int sys_mach_trap_mux_trap(struct thread *,
+    struct mach_trap_mux_trap_args *);
 
 /*
  * Phase C2: lazy Mach init. If the calling process/thread has no
@@ -262,6 +265,24 @@ sys_task_set_special_port_trap_guarded(struct thread *td,
 	return (sys_task_set_special_port_trap(td, uap));
 }
 
+/*
+ * Mach trap multiplexer. Needs Mach task state for the same reason
+ * the individual port traps do — the inlined handlers reach
+ * current_task()->itk_space.
+ */
+static int
+sys_mach_trap_mux_trap_guarded(struct thread *td,
+    struct mach_trap_mux_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 4;	/* KERN_INVALID_ARGUMENT */
+		return (0);
+	}
+	return (sys_mach_trap_mux_trap(td, uap));
+}
+
 static struct sysent mach_reply_port_sysent = {
 	.sy_narg	= 0,
 	.sy_call	= (sy_call_t *)sys_mach_reply_port_guarded,
@@ -355,6 +376,20 @@ static struct sysent task_set_special_port_sysent = {
 	.sy_flags	= 0,
 };
 
+/*
+ * Multiplexer sysent. 6 args: op + 5 args. Op-number namespace in
+ * <mach/mach_traps_mux.h>. Registered at FreeBSD's RESERVED slot 91
+ * (currently unused by base; the FreeBSD project's own comment
+ * earmarks RESERVED slots for vendor / local use).
+ */
+#define MACH_TRAP_MUX_SLOT		91
+static struct sysent mach_trap_mux_sysent = {
+	.sy_narg	= 6,
+	.sy_call	= (sy_call_t *)sys_mach_trap_mux_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
 static int mach_reply_port_offset = NO_SYSCALL;
 static struct sysent mach_reply_port_old_sysent;
 
@@ -384,6 +419,9 @@ static struct sysent task_get_special_port_old_sysent;
 
 static int task_set_special_port_offset = NO_SYSCALL;
 static struct sysent task_set_special_port_old_sysent;
+
+static int mach_trap_mux_offset = NO_SYSCALL;
+static struct sysent mach_trap_mux_old_sysent;
 
 SYSCTL_INT(_mach_syscall, OID_AUTO, mach_reply_port, CTLFLAG_RD,
     &mach_reply_port_offset, 0,
@@ -449,6 +487,12 @@ SYSCTL_INT(_mach_syscall, OID_AUTO, task_set_special_port, CTLFLAG_RD,
     "Dynamically-allocated FreeBSD syscall number for task_set_special_port "
     "(3-arg syscall; -1 if registration failed)");
 
+SYSCTL_INT(_mach_syscall, OID_AUTO, mach_trap_mux, CTLFLAG_RD,
+    &mach_trap_mux_offset, 0,
+    "FreeBSD syscall number for the Mach trap multiplexer "
+    "(6-arg syscall: op + 5 args; ops in <mach/mach_traps_mux.h>; "
+    "-1 if registration failed)");
+
 static void
 wire_one(const char *name, int *offset, struct sysent *sy,
     struct sysent *old_sy)
@@ -463,6 +507,34 @@ wire_one(const char *name, int *offset, struct sysent *sy,
 		return;
 	}
 	printf("mach: %s registered at syscall %d\n", name, *offset);
+}
+
+/*
+ * wire_one_at — like wire_one but takes a fixed syscall slot number
+ * rather than NO_SYSCALL. Used to claim FreeBSD's RESERVED slots
+ * (sys/kern/syscalls.master entries marked "RESERVED reserved for
+ * local or vendor use") when the auto-allocated lkmnosys range
+ * (210-219) is exhausted. kern_syscall_register accepts an explicit
+ * offset and registers if the existing sysent[offset].sy_call is
+ * either lkmnosys or nosys (which RESERVED slots use).
+ */
+static void
+wire_one_at(const char *name, int slot, int *offset, struct sysent *sy,
+    struct sysent *old_sy)
+{
+	int error;
+
+	*offset = slot;
+	error = kern_syscall_register(sysent, offset, sy, old_sy,
+	    SY_THR_STATIC_KLD);
+	if (error != 0) {
+		printf("mach: syscall_register(%s at %d) failed: %d\n",
+		    name, slot, error);
+		*offset = NO_SYSCALL;
+		return;
+	}
+	printf("mach: %s registered at syscall %d (explicit)\n",
+	    name, *offset);
 }
 
 static void
@@ -509,12 +581,18 @@ mach_syscall_wire_register(void *arg __unused)
 	    &task_get_special_port_sysent, &task_get_special_port_old_sysent);
 	wire_one("task_set_special_port", &task_set_special_port_offset,
 	    &task_set_special_port_sysent, &task_set_special_port_old_sysent);
+	wire_one_at("mach_trap_mux", MACH_TRAP_MUX_SLOT,
+	    &mach_trap_mux_offset,
+	    &mach_trap_mux_sysent, &mach_trap_mux_old_sysent);
 }
 
 static void
 mach_syscall_wire_deregister(void *arg __unused)
 {
 
+	unwire_one("mach_trap_mux",
+	    &mach_trap_mux_offset,
+	    &mach_trap_mux_old_sysent);
 	unwire_one("task_set_special_port",
 	    &task_set_special_port_offset,
 	    &task_set_special_port_old_sysent);

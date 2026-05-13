@@ -21,6 +21,7 @@
 #include <mach/message.h>
 #include <mach/task_special_ports.h>
 #include <mach/host_special_ports.h>
+#include <mach/mach_traps_mux.h>
 
 #define	NO_SYSCALL	(-1)
 
@@ -243,18 +244,28 @@ task_set_special_port(mach_port_name_t task, int which, mach_port_t port)
 
 /*
  * host_set_special_port — set a slot in the host's special-port
- * array. Routes through the task_set_special_port syscall: FreeBSD
- * reserves only 10 dynamic syscall slots (210-219) and we've used
- * them all, so the kernel-side task_set_special_port_trap handler
- * routes to realhost.special[] when `which == HOST_BOOTSTRAP_PORT`
- * (which doesn't collide with any TASK_* value). The bootstrap
- * server calls this once at startup to publish its receive port
- * host-wide; thereafter task_get_special_port(TASK_BOOTSTRAP_PORT)
- * falls back to it when the per-task itk_bootstrap slot is null.
+ * array. Routes through the Mach trap multiplexer (one FreeBSD
+ * syscall slot, op-number selects the trap). FreeBSD reserves only
+ * 10 dynamic lkmnosys slots (210-219) and we've used them all on
+ * foundational traps; the multiplexer covers everything else.
+ *
+ * The bootstrap server calls this once at startup to publish its
+ * receive port host-wide; thereafter task_get_special_port(
+ * TASK_BOOTSTRAP_PORT) falls back to realhost.special[
+ * HOST_BOOTSTRAP_PORT] when the per-task itk_bootstrap slot is null.
  */
 kern_return_t
 host_set_special_port(mach_port_name_t host, int which, mach_port_t port)
 {
+	static int num = NO_SYSCALL;
 
-	return (task_set_special_port(host, which, port));
+	if (num == NO_SYSCALL) {
+		num = resolve_syscall("mach_trap_mux");
+		if (num == NO_SYSCALL)
+			return (KERN_RESOURCE_SHORTAGE);
+	}
+	return ((kern_return_t)syscall(num,
+	    MACH_TRAP_OP_HOST_SET_SPECIAL_PORT,
+	    (uint64_t)host, (uint64_t)which, (uint64_t)port,
+	    (uint64_t)0, (uint64_t)0));
 }

@@ -10,6 +10,7 @@
 #     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so
 #     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so.0
 #     ${DESTDIR}/usr/include/mach/mach_traps.h
+#     ${DESTDIR}/usr/include/mach/mach_traps_mux.h
 #     ${DESTDIR}/usr/include/mach/mach_port.h
 #     ${DESTDIR}/usr/include/mach/message.h
 #     ${DESTDIR}/usr/include/mach/task_special_ports.h
@@ -25,6 +26,7 @@ NO_MAN=		yes
 WARNS?=		6
 
 INCS=		include/mach/mach_traps.h \
+		include/mach/mach_traps_mux.h \
 		include/mach/mach_port.h \
 		include/mach/message.h \
 		include/mach/task_special_ports.h \

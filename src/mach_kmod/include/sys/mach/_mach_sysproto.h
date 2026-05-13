@@ -177,6 +177,20 @@ struct task_set_special_port_trap_args {
 	char which_l_[PADL_(int)]; int which; char which_r_[PADR_(int)];
 	char port_l_[PADL_(mach_port_name_t)]; mach_port_name_t port; char port_r_[PADR_(mach_port_name_t)];
 };
+/*
+ * Mach trap multiplexer args. op selects which Mach trap to invoke;
+ * a1..a5 are the trap's own arguments (the multiplexer is amd64-libc
+ * 6-arg ABI: op consumes one, leaving five for the trap). Op numbers
+ * defined in <mach/mach_traps_mux.h>.
+ */
+struct mach_trap_mux_trap_args {
+	char op_l_[PADL_(int)]; int op; char op_r_[PADR_(int)];
+	char a1_l_[PADL_(uint64_t)]; uint64_t a1; char a1_r_[PADR_(uint64_t)];
+	char a2_l_[PADL_(uint64_t)]; uint64_t a2; char a2_r_[PADR_(uint64_t)];
+	char a3_l_[PADL_(uint64_t)]; uint64_t a3; char a3_r_[PADR_(uint64_t)];
+	char a4_l_[PADL_(uint64_t)]; uint64_t a4; char a4_r_[PADR_(uint64_t)];
+	char a5_l_[PADL_(uint64_t)]; uint64_t a5; char a5_r_[PADR_(uint64_t)];
+};
 struct mach_msg_trap_args {
 	char msg_l_[PADL_(mach_msg_header_t *)]; mach_msg_header_t * msg; char msg_r_[PADR_(mach_msg_header_t *)];
 	char option_l_[PADL_(mach_msg_option_t)]; mach_msg_option_t option; char option_r_[PADR_(mach_msg_option_t)];

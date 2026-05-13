@@ -251,24 +251,12 @@ sys_task_get_special_port_trap(struct thread *td,
 	return (0);
 }
 
-/*
- * task_set_special_port — sets a per-task special-port slot. When
- * `which == HOST_BOOTSTRAP_PORT` the routing is redirected to the
- * host-wide realhost.special[] array instead, since FreeBSD only
- * reserves ten dynamic syscall slots (210-219) and we've used them
- * all. The HOST_BOOTSTRAP_PORT case is what the bootstrap server
- * calls via libsystem_kernel's host_set_special_port() (which is a
- * thin userland wrapper that re-routes through this syscall). The
- * which-value namespace doesn't collide: TASK_BOOTSTRAP_PORT is 4,
- * HOST_BOOTSTRAP_PORT is 13.
- */
 int
 sys_task_set_special_port_trap(struct thread *td,
     struct task_set_special_port_trap_args *uap)
 {
 	task_t task = current_task();
 	ipc_port_t port = IP_NULL;
-	ipc_port_t old;
 	kern_return_t kr;
 
 	/*
@@ -287,17 +275,6 @@ sys_task_set_special_port_trap(struct thread *td,
 		}
 	}
 
-	if (uap->which == HOST_BOOTSTRAP_PORT) {
-		host_lock(&realhost);
-		old = realhost.special[HOST_BOOTSTRAP_PORT];
-		realhost.special[HOST_BOOTSTRAP_PORT] = port;
-		host_unlock(&realhost);
-		if (IP_VALID(old))
-			ipc_port_release_send(old);
-		td->td_retval[0] = KERN_SUCCESS;
-		return (0);
-	}
-
 	/*
 	 * task_set_special_port stores `port` directly in the task's
 	 * itk_<slot> field and releases whatever was there before. It
@@ -305,6 +282,72 @@ sys_task_set_special_port_trap(struct thread *td,
 	 */
 	td->td_retval[0] = task_set_special_port(task, uap->which, port);
 	return (0);
+}
+
+/*
+ * mach_trap_mux — multiplexer dispatcher. One FreeBSD syscall slot
+ * hosts an internal table of Mach traps, keyed by op-number. Frees
+ * us from FreeBSD's 10-slot lkmnosys cap (210-219) for the bulk of
+ * the Mach trap surface. mach_msg_trap and mach_msg_overwrite_trap
+ * stay in dedicated slots because their 7+/9-arg shapes don't fit
+ * inside the 5-user-arg budget the multiplexer leaves (libc's
+ * 6-arg syscall ABI minus one slot for op).
+ *
+ * See <mach/mach_traps_mux.h> for the op-number namespace.
+ */
+static int
+mux_host_set_special_port(struct thread *td,
+    mach_port_name_t host __unused, int which, mach_port_name_t portname)
+{
+	task_t task = current_task();
+	ipc_port_t port = IP_NULL;
+	ipc_port_t old;
+	kern_return_t kr;
+
+	/* Only HOST_BOOTSTRAP_PORT is settable from userland at the
+	 * moment — kernel-provided slots (HOST_PORT etc.) and other
+	 * Apple-defined slots are rejected. */
+	if (which != HOST_BOOTSTRAP_PORT) {
+		td->td_retval[0] = KERN_INVALID_ARGUMENT;
+		return (0);
+	}
+
+	if (portname != 0) {
+		kr = ipc_object_copyin(task->itk_space, portname,
+		    MACH_MSG_TYPE_COPY_SEND, (ipc_object_t *)&port);
+		if (kr != KERN_SUCCESS) {
+			td->td_retval[0] = kr;
+			return (0);
+		}
+	}
+
+	host_lock(&realhost);
+	old = realhost.special[which];
+	realhost.special[which] = port;
+	host_unlock(&realhost);
+
+	if (IP_VALID(old))
+		ipc_port_release_send(old);
+
+	td->td_retval[0] = KERN_SUCCESS;
+	return (0);
+}
+
+int
+sys_mach_trap_mux_trap(struct thread *td,
+    struct mach_trap_mux_trap_args *uap)
+{
+
+	switch (uap->op) {
+	case 1:		/* MACH_TRAP_OP_HOST_SET_SPECIAL_PORT */
+		return (mux_host_set_special_port(td,
+		    (mach_port_name_t)uap->a1,
+		    (int)uap->a2,
+		    (mach_port_name_t)uap->a3));
+	default:
+		td->td_retval[0] = KERN_INVALID_ARGUMENT;
+		return (0);
+	}
 }
 
 int
