@@ -176,6 +176,17 @@ expect {
 }
 expect {
     timeout {
+        puts "\nFAIL: TASK-SPECIAL-PORT marker not seen"
+        exit 1
+    }
+    "TASK-SPECIAL-PORT-FAIL" {
+        puts "\nFAIL: task_*_special_port round-trip failed"
+        exit 1
+    }
+    "TASK-SPECIAL-PORT-OK" { puts "\nOK: task_*_special_port round-trip works" }
+}
+expect {
+    timeout {
         puts "\nFAIL: LIBDISPATCH marker not seen"
         exit 1
     }

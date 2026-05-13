@@ -247,6 +247,18 @@ cc -I"$WORK/rootfs/usr/include" \
    -lsystem_kernel
 ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_mach_port"
 
+# test_task_special_port — exercises task_get_special_port /
+# task_set_special_port traps (Phase G prerequisite for the bootstrap
+# server's port discovery). Failure surfaces as TASK-SPECIAL-PORT-FAIL.
+echo "==> building test_task_special_port"
+cc -I"$WORK/rootfs/usr/include" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_task_special_port" \
+   "$ROOT/src/mach_kmod/tests/test_task_special_port.c" \
+   -lsystem_kernel
+ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_task_special_port"
+
 #
 # 3e. verify: assert install shape + ldconfig resolution + ldd resolves
 #     the test binary's libsystem_kernel.so.0 dep. Build fails fast here

@@ -207,6 +207,74 @@ sys_host_self_trap(struct thread *td, struct host_self_trap_args *uap)
 	return (0);
 }
 
+/*
+ * task_get_special_port / task_set_special_port — direct syscall
+ * wrappers, not Apple-imported (Apple delivers these over MIG to the
+ * task port). Used by libsystem_kernel's task_get_bootstrap_port /
+ * task_set_bootstrap_port macros for the bootstrap server's
+ * client-process port discovery (Phase G design).
+ *
+ * `target` is the task port name; we ignore it and use current_task()
+ * — matches the existing mach_port_* trap pattern. `which` selects
+ * which special-port slot per <sys/mach/task_special_ports.h>.
+ */
+int
+sys_task_get_special_port_trap(struct thread *td,
+    struct task_get_special_port_trap_args *uap)
+{
+	task_t task = current_task();
+	ipc_port_t port;
+	mach_port_name_t name;
+	kern_return_t kr;
+
+	kr = task_get_special_port(task, uap->which, &port);
+	if (kr != KERN_SUCCESS) {
+		td->td_retval[0] = kr;
+		return (0);
+	}
+
+	/*
+	 * task_get_special_port handed us a "naked" send right (made via
+	 * ipc_port_copy_send / ipc_port_make_send in ipc_tt.c).
+	 * ipc_port_copyout_send installs it in our IPC space and returns
+	 * the user-visible name. On failure it releases the right itself
+	 * and returns MACH_PORT_NAME_NULL / _DEAD.
+	 */
+	name = ipc_port_copyout_send(port, task->itk_space);
+	if (copyout(&name, uap->port, sizeof(name)) != 0) {
+		td->td_retval[0] = KERN_INVALID_ARGUMENT;
+		return (0);
+	}
+	td->td_retval[0] = KERN_SUCCESS;
+	return (0);
+}
+
+int
+sys_task_set_special_port_trap(struct thread *td,
+    struct task_set_special_port_trap_args *uap)
+{
+	task_t task = current_task();
+	ipc_port_t port = IP_NULL;
+	kern_return_t kr;
+
+	/* MACH_PORT_NULL is a legal "clear the slot" value. */
+	if (uap->port != MACH_PORT_NULL) {
+		kr = ipc_object_copyin(task->itk_space, uap->port,
+		    MACH_MSG_TYPE_COPY_SEND, (ipc_object_t *)&port);
+		if (kr != KERN_SUCCESS) {
+			td->td_retval[0] = kr;
+			return (0);
+		}
+	}
+	/*
+	 * task_set_special_port stores `port` directly in the task's
+	 * itk_<slot> field and releases whatever was there before. It
+	 * takes ownership of the send right we just copied in.
+	 */
+	td->td_retval[0] = task_set_special_port(task, uap->which, port);
+	return (0);
+}
+
 int
 sys__kernelrpc_mach_port_allocate_trap(struct thread *td __unused, struct _kernelrpc_mach_port_allocate_trap_args *uap)
 {

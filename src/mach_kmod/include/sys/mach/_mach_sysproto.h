@@ -160,6 +160,23 @@ struct task_self_trap_args {
 struct host_self_trap_args {
 	syscallarg_t dummy;
 };
+/*
+ * task_get_special_port / task_set_special_port traps. Not part of the
+ * Apple-imported _kernelrpc_*_trap family (Apple delivers these via
+ * MIG over the task port); added here as direct syscalls because
+ * freebsd-launchd-mach doesn't ship MIG. The `which` selector matches
+ * TASK_BOOTSTRAP_PORT etc. from <sys/mach/task_special_ports.h>.
+ */
+struct task_get_special_port_trap_args {
+	char target_l_[PADL_(mach_port_name_t)]; mach_port_name_t target; char target_r_[PADR_(mach_port_name_t)];
+	char which_l_[PADL_(int)]; int which; char which_r_[PADR_(int)];
+	char port_l_[PADL_(mach_port_name_t *)]; mach_port_name_t * port; char port_r_[PADR_(mach_port_name_t *)];
+};
+struct task_set_special_port_trap_args {
+	char target_l_[PADL_(mach_port_name_t)]; mach_port_name_t target; char target_r_[PADR_(mach_port_name_t)];
+	char which_l_[PADL_(int)]; int which; char which_r_[PADR_(int)];
+	char port_l_[PADL_(mach_port_name_t)]; mach_port_name_t port; char port_r_[PADR_(mach_port_name_t)];
+};
 struct mach_msg_trap_args {
 	char msg_l_[PADL_(mach_msg_header_t *)]; mach_msg_header_t * msg; char msg_r_[PADR_(mach_msg_header_t *)];
 	char option_l_[PADL_(mach_msg_option_t)]; mach_msg_option_t option; char option_r_[PADR_(mach_msg_option_t)];

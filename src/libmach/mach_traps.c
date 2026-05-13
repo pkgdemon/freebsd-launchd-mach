@@ -19,6 +19,7 @@
 #include <mach/mach_traps.h>
 #include <mach/mach_port.h>
 #include <mach/message.h>
+#include <mach/task_special_ports.h>
 
 #define	NO_SYSCALL	(-1)
 
@@ -204,4 +205,37 @@ mach_port_insert_right(mach_port_name_t task, mach_port_name_t name,
 			return (KERN_RESOURCE_SHORTAGE);
 	}
 	return ((kern_return_t)syscall(num, task, name, poly, polyPoly));
+}
+
+/*
+ * Task special-port traps. `which` is TASK_BOOTSTRAP_PORT etc. from
+ * <mach/task_special_ports.h>. task_get_bootstrap_port /
+ * task_set_bootstrap_port are macros that pick TASK_BOOTSTRAP_PORT for
+ * the `which` arg.
+ */
+kern_return_t
+task_get_special_port(mach_port_name_t task, int which,
+    mach_port_name_t *port)
+{
+	static int num = NO_SYSCALL;
+
+	if (num == NO_SYSCALL) {
+		num = resolve_syscall("task_get_special_port");
+		if (num == NO_SYSCALL)
+			return (KERN_RESOURCE_SHORTAGE);
+	}
+	return ((kern_return_t)syscall(num, task, which, port));
+}
+
+kern_return_t
+task_set_special_port(mach_port_name_t task, int which, mach_port_t port)
+{
+	static int num = NO_SYSCALL;
+
+	if (num == NO_SYSCALL) {
+		num = resolve_syscall("task_set_special_port");
+		if (num == NO_SYSCALL)
+			return (KERN_RESOURCE_SHORTAGE);
+	}
+	return ((kern_return_t)syscall(num, task, which, port));
 }

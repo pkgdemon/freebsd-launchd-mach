@@ -65,6 +65,25 @@ else
     exit 1
 fi
 
+# 2c. userland: task_get_special_port / task_set_special_port. Phase G
+# prerequisite — the bootstrap server uses task_set_bootstrap_port on
+# each client task to publish its receive port, and clients read it
+# back via task_get_bootstrap_port at mach_init time. The test mints
+# a service-shaped port, stores it as TASK_BOOTSTRAP_PORT, reads it
+# back, and asserts the round-trip preserves the port name.
+if [ -x /usr/tests/freebsd-launchd-mach/test_task_special_port ]; then
+    if /usr/tests/freebsd-launchd-mach/test_task_special_port; then
+        echo "TASK-SPECIAL-PORT-OK: TASK_BOOTSTRAP_PORT set/get round-trip succeeded"
+    else
+        rc=$?
+        echo "TASK-SPECIAL-PORT-FAIL: test_task_special_port exit=$rc"
+        exit 1
+    fi
+else
+    echo "TASK-SPECIAL-PORT-FAIL: test_task_special_port binary not installed"
+    exit 1
+fi
+
 # 3. userland: libdispatch loads + serial queue executes a sync callback.
 # Baseline check that the vendored swift-corelibs-libdispatch (built
 # in our chroot pipeline, installed to /usr/lib/libsystem/) is loadable

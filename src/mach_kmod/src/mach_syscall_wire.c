@@ -52,6 +52,8 @@ struct mach_msg_trap_args;
 struct _kernelrpc_mach_port_allocate_trap_args;
 struct _kernelrpc_mach_port_deallocate_trap_args;
 struct _kernelrpc_mach_port_insert_right_trap_args;
+struct task_get_special_port_trap_args;
+struct task_set_special_port_trap_args;
 
 SYSCTL_DECL(_mach);
 static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
@@ -79,6 +81,10 @@ int sys__kernelrpc_mach_port_deallocate_trap(struct thread *,
     struct _kernelrpc_mach_port_deallocate_trap_args *);
 int sys__kernelrpc_mach_port_insert_right_trap(struct thread *,
     struct _kernelrpc_mach_port_insert_right_trap_args *);
+int sys_task_get_special_port_trap(struct thread *,
+    struct task_get_special_port_trap_args *);
+int sys_task_set_special_port_trap(struct thread *,
+    struct task_set_special_port_trap_args *);
 
 /*
  * Phase C2: lazy Mach init. If the calling process/thread has no
@@ -224,6 +230,38 @@ sys__kernelrpc_mach_port_insert_right_trap_guarded(struct thread *td,
 	return (sys__kernelrpc_mach_port_insert_right_trap(td, uap));
 }
 
+/*
+ * Task special-port traps. Both reach current_task() and the task's
+ * itk_<slot> fields, so they need Mach task state. KERN_INVALID_ARGUMENT
+ * (4) is the closest "task is null" code in the standard return set
+ * — same value task_get/set_special_port itself returns on TASK_NULL.
+ */
+static int
+sys_task_get_special_port_trap_guarded(struct thread *td,
+    struct task_get_special_port_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 4;	/* KERN_INVALID_ARGUMENT */
+		return (0);
+	}
+	return (sys_task_get_special_port_trap(td, uap));
+}
+
+static int
+sys_task_set_special_port_trap_guarded(struct thread *td,
+    struct task_set_special_port_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 4;	/* KERN_INVALID_ARGUMENT */
+		return (0);
+	}
+	return (sys_task_set_special_port_trap(td, uap));
+}
+
 static struct sysent mach_reply_port_sysent = {
 	.sy_narg	= 0,
 	.sy_call	= (sy_call_t *)sys_mach_reply_port_guarded,
@@ -298,6 +336,25 @@ static struct sysent _kernelrpc_mach_port_insert_right_sysent = {
 	.sy_flags	= 0,
 };
 
+/*
+ * Task special-port sysents. 3 args each:
+ *   get: (target, which, port*)
+ *   set: (target, which, port)
+ */
+static struct sysent task_get_special_port_sysent = {
+	.sy_narg	= 3,
+	.sy_call	= (sy_call_t *)sys_task_get_special_port_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
+static struct sysent task_set_special_port_sysent = {
+	.sy_narg	= 3,
+	.sy_call	= (sy_call_t *)sys_task_set_special_port_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
 static int mach_reply_port_offset = NO_SYSCALL;
 static struct sysent mach_reply_port_old_sysent;
 
@@ -321,6 +378,12 @@ static struct sysent _kernelrpc_mach_port_deallocate_old_sysent;
 
 static int _kernelrpc_mach_port_insert_right_offset = NO_SYSCALL;
 static struct sysent _kernelrpc_mach_port_insert_right_old_sysent;
+
+static int task_get_special_port_offset = NO_SYSCALL;
+static struct sysent task_get_special_port_old_sysent;
+
+static int task_set_special_port_offset = NO_SYSCALL;
+static struct sysent task_set_special_port_old_sysent;
 
 SYSCTL_INT(_mach_syscall, OID_AUTO, mach_reply_port, CTLFLAG_RD,
     &mach_reply_port_offset, 0,
@@ -368,6 +431,23 @@ SYSCTL_INT(_mach_syscall, OID_AUTO, mach_port_insert_right, CTLFLAG_RD,
     &_kernelrpc_mach_port_insert_right_offset, 0,
     "Dynamically-allocated FreeBSD syscall number for mach_port_insert_right "
     "(4-arg syscall; -1 if registration failed)");
+
+/*
+ * Task special-port traps. Phase G prerequisite: needed so the
+ * bootstrap server can publish its receive port as each client task's
+ * TASK_BOOTSTRAP_PORT (and the client can read it back). Apple delivers
+ * these over MIG to the task port; we expose them as direct syscalls
+ * since freebsd-launchd-mach doesn't ship MIG.
+ */
+SYSCTL_INT(_mach_syscall, OID_AUTO, task_get_special_port, CTLFLAG_RD,
+    &task_get_special_port_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for task_get_special_port "
+    "(3-arg syscall; -1 if registration failed)");
+
+SYSCTL_INT(_mach_syscall, OID_AUTO, task_set_special_port, CTLFLAG_RD,
+    &task_set_special_port_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for task_set_special_port "
+    "(3-arg syscall; -1 if registration failed)");
 
 static void
 wire_one(const char *name, int *offset, struct sysent *sy,
@@ -425,12 +505,22 @@ mach_syscall_wire_register(void *arg __unused)
 	wire_one("mach_port_insert_right", &_kernelrpc_mach_port_insert_right_offset,
 	    &_kernelrpc_mach_port_insert_right_sysent,
 	    &_kernelrpc_mach_port_insert_right_old_sysent);
+	wire_one("task_get_special_port", &task_get_special_port_offset,
+	    &task_get_special_port_sysent, &task_get_special_port_old_sysent);
+	wire_one("task_set_special_port", &task_set_special_port_offset,
+	    &task_set_special_port_sysent, &task_set_special_port_old_sysent);
 }
 
 static void
 mach_syscall_wire_deregister(void *arg __unused)
 {
 
+	unwire_one("task_set_special_port",
+	    &task_set_special_port_offset,
+	    &task_set_special_port_old_sysent);
+	unwire_one("task_get_special_port",
+	    &task_get_special_port_offset,
+	    &task_get_special_port_old_sysent);
 	unwire_one("mach_port_insert_right",
 	    &_kernelrpc_mach_port_insert_right_offset,
 	    &_kernelrpc_mach_port_insert_right_old_sysent);
