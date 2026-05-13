@@ -66,4 +66,22 @@ else
     exit 1
 fi
 
+# 4. Mach IPC backend stub: confirm DISPATCH_SOURCE_TYPE_MACH_RECV /
+# _SEND symbols are exported by libsystem_dispatch.so + dispatch_source_
+# create with MACH_RECV returns NULL gracefully via our stub backend
+# (no crash). Real polling-thread receive lands later; this stub
+# unblocks future libxpc linking.
+if [ -x /usr/tests/freebsd-launchd-mach/test_libdispatch_mach ]; then
+    if /usr/tests/freebsd-launchd-mach/test_libdispatch_mach; then
+        echo "LIBDISPATCH-MACH-OK: Mach source-type symbols present"
+    else
+        rc=$?
+        echo "LIBDISPATCH-MACH-FAIL: test_libdispatch_mach exit=$rc"
+        exit 1
+    fi
+else
+    echo "LIBDISPATCH-MACH-FAIL: test_libdispatch_mach binary not installed"
+    exit 1
+fi
+
 exit 0

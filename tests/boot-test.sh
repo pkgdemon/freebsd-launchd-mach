@@ -174,6 +174,17 @@ expect {
     }
     "LIBDISPATCH-OK" { puts "\nOK: libdispatch baseline works" }
 }
+expect {
+    timeout {
+        puts "\nFAIL: LIBDISPATCH-MACH marker not seen"
+        exit 1
+    }
+    "LIBDISPATCH-MACH-FAIL" {
+        puts "\nFAIL: libdispatch Mach backend stub failed"
+        exit 1
+    }
+    "LIBDISPATCH-MACH-OK" { puts "\nOK: libdispatch Mach backend stub works" }
+}
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns
 # halt -p into a clean shutdown rather than a reset loop).

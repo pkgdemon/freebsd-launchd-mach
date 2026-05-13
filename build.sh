@@ -340,6 +340,14 @@ cc -I"$WORK/rootfs/usr/include" \
    "$ROOT/src/libdispatch-tests/test_libdispatch.c" \
    -ldispatch -lpthread
 
+echo "==> building test_libdispatch_mach"
+cc -I"$WORK/rootfs/usr/include" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libdispatch_mach" \
+   "$ROOT/src/libdispatch-tests/test_libdispatch_mach.c" \
+   -ldispatch -lpthread
+
 #
 # 3h. verify libdispatch install shape + ldconfig + ldd resolution.
 #
