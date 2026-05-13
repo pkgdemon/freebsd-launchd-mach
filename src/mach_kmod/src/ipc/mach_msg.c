@@ -375,6 +375,23 @@ mach_msg_receive(
 	ipc_object_release(object);
 
 	if (mr != MACH_MSG_SUCCESS) {
+		/*
+		 * MACH_RCV_LARGE + MACH_RCV_TOO_LARGE: ipc_mqueue_post_on_thread
+		 * (ipc_mqueue.c) intentionally leaves the message on the queue
+		 * and sets thread->ith_kmsg = IKM_NULL — caller wanted the size
+		 * back, not the message. Our local kmsg here is uninitialized
+		 * stack garbage; passing it to msg_receive_error dereferences it
+		 * and GP-faults the kernel. Return the error code without
+		 * touching msg or kmsg. (libdispatch's polling-thread Mach RECV
+		 * backend in src/libdispatch/src/event/event_mach_freebsd.c uses
+		 * exactly this peek path with rcv_size=0 — without this guard
+		 * any DISPATCH_SOURCE_TYPE_MACH_RECV source panics the kernel
+		 * the moment its first message arrives.)
+		 */
+		if (mr == MACH_RCV_TOO_LARGE && (option & MACH_RCV_LARGE)) {
+			FREE_SCATTER_LIST(slist, slist_size, slist_rt);
+			return mr;
+		}
 		if (mr == MACH_RCV_TOO_LARGE || mr == MACH_RCV_SCATTER_SMALL
 		    ) {
 			if (msg_receive_error(kmsg, msg, option, seqno, space)
