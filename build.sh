@@ -155,37 +155,12 @@ EOF
             pkg install -y $BUILD_PKGS
     fi
 
-    if [ -n "$BUILD_PKGS" ] || [ -n "$BASE_BUILD_PKGS" ]; then
-        echo "==> purging build packages (ports + pkgbase build-only)"
-        if [ -n "$BUILD_PKGS" ]; then
-            # shellcheck disable=SC2086
-            chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
-                pkg delete -y $BUILD_PKGS
-        fi
-        # buildpkgs-base.txt: pkgbase build-only set installed in step 2
-        # alongside pkglist-base.txt. Same purge semantics — gone before
-        # mkuzip so they don't ship in the ISO.
-        if [ -n "$BASE_BUILD_PKGS" ]; then
-            # shellcheck disable=SC2086
-            chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
-                pkg delete -y $BASE_BUILD_PKGS
-        fi
-        chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
-            pkg autoremove -y || true
-    fi
-
-    # Clean the pkg download cache — every pkg we installed left its
-    # .pkg archive in /var/cache/pkg/ regardless of whether the pkg was
-    # later deleted. Without this, the rootfs.uzip carries hundreds of
-    # MB of cached archives we never need at runtime (FreeBSD-clang
-    # alone is ~50 MB compressed). pkg delete touches installed files,
-    # not the cache; pkg clean -a is what empties the cache.
-    echo "==> cleaning pkg download cache"
-    chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
-        pkg clean -a -y || true
-
-    cleanup_chroot
-    trap - EXIT INT TERM
+    # Build pkgs (cmake/ninja/clang/etc.) stay installed through the
+    # subsequent build steps (mach.ko, libsystem_kernel, libdispatch).
+    # Purge + chroot cleanup move to the very end of the build phase,
+    # after libdispatch is built (see "3z" below). Don't call
+    # cleanup_chroot here — devfs + resolv.conf must stay live for the
+    # libdispatch chroot build to work.
 fi
 
 #
@@ -372,6 +347,39 @@ chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libdispatch \
     | grep -q "libdispatch.so.0 => /usr/lib/libsystem/" \
     || { echo "FAIL: ldd doesn't resolve test_libdispatch to /usr/lib/libsystem/"; exit 1; }
 echo "==> libdispatch install verified"
+
+#
+# 3z. purge build packages + clean pkg cache + tear down chroot.
+#     Runs LAST in the build phase, after every chroot-side build
+#     (libdispatch) has used cmake/ninja/clang. Build pkgs (cmake/ninja
+#     from buildpkgs.txt; clang/lld/-dev from buildpkgs-base.txt) get
+#     removed before mkuzip so they don't ship in the ISO. Pkg
+#     download cache also cleared.
+#
+if [ -n "$BUILD_PKGS" ] || [ -n "$BASE_BUILD_PKGS" ]; then
+    echo "==> purging build packages (ports + pkgbase build-only)"
+    if [ -n "$BUILD_PKGS" ]; then
+        # shellcheck disable=SC2086
+        chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
+            pkg delete -y $BUILD_PKGS
+    fi
+    if [ -n "$BASE_BUILD_PKGS" ]; then
+        # shellcheck disable=SC2086
+        chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
+            pkg delete -y $BASE_BUILD_PKGS
+    fi
+    chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
+        pkg autoremove -y || true
+fi
+
+if [ -n "$RUNTIME_PKGS" ] || [ -n "$BUILD_PKGS" ]; then
+    echo "==> cleaning pkg download cache"
+    chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
+        pkg clean -a -y || true
+
+    cleanup_chroot
+    trap - EXIT INT TERM
+fi
 
 #
 # 4. apply local overlays (etc/rc.conf, etc/motd.template,
