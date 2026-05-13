@@ -165,6 +165,17 @@ expect {
 }
 expect {
     timeout {
+        puts "\nFAIL: MACH-PORT marker not seen"
+        exit 1
+    }
+    "MACH-PORT-FAIL" {
+        puts "\nFAIL: mach_port_* round-trip failed"
+        exit 1
+    }
+    "MACH-PORT-OK" { puts "\nOK: mach_port_* round-trip works" }
+}
+expect {
+    timeout {
         puts "\nFAIL: LIBDISPATCH marker not seen"
         exit 1
     }
@@ -180,10 +191,10 @@ expect {
         exit 1
     }
     "LIBDISPATCH-MACH-FAIL" {
-        puts "\nFAIL: libdispatch Mach backend stub failed"
+        puts "\nFAIL: libdispatch Mach RECV round-trip failed"
         exit 1
     }
-    "LIBDISPATCH-MACH-OK" { puts "\nOK: libdispatch Mach backend stub works" }
+    "LIBDISPATCH-MACH-OK" { puts "\nOK: libdispatch Mach RECV round-trip works" }
 }
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns

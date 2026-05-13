@@ -1,0 +1,68 @@
+/*
+ * mach/mach_port.h — userland API for the port-management Mach traps.
+ *
+ * Wraps the three syscalls registered by mach.ko at module load:
+ * mach_port_allocate (3 args), mach_port_deallocate (2 args),
+ * mach_port_insert_right (4 args). Numbers are dynamic — libsystem_kernel
+ * resolves them via `sysctl mach.syscall.<name>` on first call.
+ *
+ * Consumers: ravynOS-fork libxpc and anyone else that needs to allocate
+ * Mach ports beyond the four-trap family (task/thread/host/reply).
+ *
+ * If mach.ko is not loaded these functions return KERN_RESOURCE_SHORTAGE
+ * — matching Apple's "couldn't allocate" code in the standard return set.
+ */
+#ifndef _MACH_MACH_PORT_H_
+#define _MACH_MACH_PORT_H_
+
+#include <mach/mach_traps.h>	/* mach_port_name_t, MACH_PORT_NULL */
+#include <mach/message.h>	/* mach_port_t */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef int kern_return_t;
+typedef unsigned int mach_port_right_t;
+typedef unsigned char mach_msg_type_name_t;
+
+/* Standard kern_return_t codes we care about; full set in
+ * <sys/mach/kern_return.h> on the kernel side. */
+#define KERN_SUCCESS              0
+#define KERN_INVALID_ARGUMENT     4
+#define KERN_RESOURCE_SHORTAGE    6
+#define KERN_FAILURE              5
+
+/* mach_port_right_t values (matches <sys/mach/port.h>). */
+#define MACH_PORT_RIGHT_SEND        ((mach_port_right_t)0)
+#define MACH_PORT_RIGHT_RECEIVE     ((mach_port_right_t)1)
+#define MACH_PORT_RIGHT_SEND_ONCE   ((mach_port_right_t)2)
+#define MACH_PORT_RIGHT_PORT_SET    ((mach_port_right_t)3)
+#define MACH_PORT_RIGHT_DEAD_NAME   ((mach_port_right_t)4)
+
+/* mach_msg_type_name_t (port-right disposition) values. Subset of
+ * MACH_MSG_TYPE_* from <sys/mach/message.h>; the MAKE_* values are
+ * what libxpc reaches for via mach_port_insert_right. */
+#define MACH_MSG_TYPE_MOVE_RECEIVE     ((mach_msg_type_name_t)16)
+#define MACH_MSG_TYPE_MOVE_SEND        ((mach_msg_type_name_t)17)
+#define MACH_MSG_TYPE_MOVE_SEND_ONCE   ((mach_msg_type_name_t)18)
+#define MACH_MSG_TYPE_COPY_SEND        ((mach_msg_type_name_t)19)
+#define MACH_MSG_TYPE_MAKE_SEND        ((mach_msg_type_name_t)20)
+/* MACH_MSG_TYPE_MAKE_SEND_ONCE (21) already declared in <mach/message.h>. */
+#define MACH_MSG_TYPE_COPY_RECEIVE     ((mach_msg_type_name_t)22)
+
+kern_return_t mach_port_allocate(mach_port_name_t task,
+    mach_port_right_t right, mach_port_name_t *name);
+
+kern_return_t mach_port_deallocate(mach_port_name_t task,
+    mach_port_name_t name);
+
+kern_return_t mach_port_insert_right(mach_port_name_t task,
+    mach_port_name_t name, mach_port_t poly,
+    mach_msg_type_name_t polyPoly);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* !_MACH_MACH_PORT_H_ */

@@ -49,6 +49,9 @@ struct task_self_trap_args;
 struct thread_self_trap_args;
 struct host_self_trap_args;
 struct mach_msg_trap_args;
+struct _kernelrpc_mach_port_allocate_trap_args;
+struct _kernelrpc_mach_port_deallocate_trap_args;
+struct _kernelrpc_mach_port_insert_right_trap_args;
 
 SYSCTL_DECL(_mach);
 static SYSCTL_NODE(_mach, OID_AUTO, syscall, CTLFLAG_RW, 0,
@@ -70,6 +73,12 @@ int sys_task_self_trap(struct thread *, struct task_self_trap_args *);
 int sys_thread_self_trap(struct thread *, struct thread_self_trap_args *);
 int sys_host_self_trap(struct thread *, struct host_self_trap_args *);
 int sys_mach_msg_trap(struct thread *, struct mach_msg_trap_args *);
+int sys__kernelrpc_mach_port_allocate_trap(struct thread *,
+    struct _kernelrpc_mach_port_allocate_trap_args *);
+int sys__kernelrpc_mach_port_deallocate_trap(struct thread *,
+    struct _kernelrpc_mach_port_deallocate_trap_args *);
+int sys__kernelrpc_mach_port_insert_right_trap(struct thread *,
+    struct _kernelrpc_mach_port_insert_right_trap_args *);
 
 /*
  * Phase C2: lazy Mach init. If the calling process/thread has no
@@ -165,6 +174,56 @@ sys_mach_msg_trap_guarded(struct thread *td, struct mach_msg_trap_args *uap)
 	return (sys_mach_msg_trap(td, uap));
 }
 
+/*
+ * Port-management traps used by libxpc (xpc_connection_create_mach_service
+ * paths) and any consumer that needs to allocate Mach ports beyond the
+ * task/thread/host/reply trio. All three reach current_task()->itk_space,
+ * so they need Mach task state; thread state is not required.
+ *
+ * On no-Mach-state, return KERN_RESOURCE_SHORTAGE (0x6 from <sys/mach/
+ * kern_return.h>) — the closest "couldn't allocate" code in the standard
+ * return set. Userland sees a non-zero kr and handles it as a generic
+ * resource failure rather than crashing.
+ */
+static int
+sys__kernelrpc_mach_port_allocate_trap_guarded(struct thread *td,
+    struct _kernelrpc_mach_port_allocate_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 6;	/* KERN_RESOURCE_SHORTAGE */
+		return (0);
+	}
+	return (sys__kernelrpc_mach_port_allocate_trap(td, uap));
+}
+
+static int
+sys__kernelrpc_mach_port_deallocate_trap_guarded(struct thread *td,
+    struct _kernelrpc_mach_port_deallocate_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 6;	/* KERN_RESOURCE_SHORTAGE */
+		return (0);
+	}
+	return (sys__kernelrpc_mach_port_deallocate_trap(td, uap));
+}
+
+static int
+sys__kernelrpc_mach_port_insert_right_trap_guarded(struct thread *td,
+    struct _kernelrpc_mach_port_insert_right_trap_args *uap)
+{
+	if (td->td_proc->p_machdata == NULL)
+		mach_task_init_lazy(td->td_proc);
+	if (td->td_proc->p_machdata == NULL) {
+		td->td_retval[0] = 6;	/* KERN_RESOURCE_SHORTAGE */
+		return (0);
+	}
+	return (sys__kernelrpc_mach_port_insert_right_trap(td, uap));
+}
+
 static struct sysent mach_reply_port_sysent = {
 	.sy_narg	= 0,
 	.sy_call	= (sy_call_t *)sys_mach_reply_port_guarded,
@@ -209,6 +268,36 @@ static struct sysent mach_msg_trap_sysent = {
 	.sy_flags	= 0,
 };
 
+/*
+ * Port-management trap sysents. Argument counts come from the
+ * _kernelrpc_*_trap_args struct definitions in <sys/mach/_mach_sysproto.h>:
+ *   allocate:      (task, right, name*)             = 3
+ *   deallocate:    (task, name)                     = 2
+ *   insert_right:  (task, name, poly, polyPoly)     = 4
+ * All fit comfortably under libc syscall()'s 6-arg ABI limit, no
+ * 7th-arg workaround required (unlike mach_msg_trap).
+ */
+static struct sysent _kernelrpc_mach_port_allocate_sysent = {
+	.sy_narg	= 3,
+	.sy_call	= (sy_call_t *)sys__kernelrpc_mach_port_allocate_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
+static struct sysent _kernelrpc_mach_port_deallocate_sysent = {
+	.sy_narg	= 2,
+	.sy_call	= (sy_call_t *)sys__kernelrpc_mach_port_deallocate_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
+static struct sysent _kernelrpc_mach_port_insert_right_sysent = {
+	.sy_narg	= 4,
+	.sy_call	= (sy_call_t *)sys__kernelrpc_mach_port_insert_right_trap_guarded,
+	.sy_auevent	= AUE_NULL,
+	.sy_flags	= 0,
+};
+
 static int mach_reply_port_offset = NO_SYSCALL;
 static struct sysent mach_reply_port_old_sysent;
 
@@ -223,6 +312,15 @@ static struct sysent host_self_trap_old_sysent;
 
 static int mach_msg_trap_offset = NO_SYSCALL;
 static struct sysent mach_msg_trap_old_sysent;
+
+static int _kernelrpc_mach_port_allocate_offset = NO_SYSCALL;
+static struct sysent _kernelrpc_mach_port_allocate_old_sysent;
+
+static int _kernelrpc_mach_port_deallocate_offset = NO_SYSCALL;
+static struct sysent _kernelrpc_mach_port_deallocate_old_sysent;
+
+static int _kernelrpc_mach_port_insert_right_offset = NO_SYSCALL;
+static struct sysent _kernelrpc_mach_port_insert_right_old_sysent;
 
 SYSCTL_INT(_mach_syscall, OID_AUTO, mach_reply_port, CTLFLAG_RD,
     &mach_reply_port_offset, 0,
@@ -248,6 +346,28 @@ SYSCTL_INT(_mach_syscall, OID_AUTO, mach_msg_trap, CTLFLAG_RD,
     &mach_msg_trap_offset, 0,
     "Dynamically-allocated FreeBSD syscall number for mach_msg_trap "
     "(7-arg syscall; -1 if registration failed)");
+
+/*
+ * Port-management traps. sysctl names use the userland-friendly form
+ * (mach_port_allocate / _deallocate / _insert_right) so libsystem_kernel's
+ * resolve_syscall(name) lookup matches the libxpc-facing function names
+ * directly. The kernel-side trap functions retain the Apple
+ * `_kernelrpc_*_trap` naming as imported.
+ */
+SYSCTL_INT(_mach_syscall, OID_AUTO, mach_port_allocate, CTLFLAG_RD,
+    &_kernelrpc_mach_port_allocate_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for mach_port_allocate "
+    "(3-arg syscall; -1 if registration failed)");
+
+SYSCTL_INT(_mach_syscall, OID_AUTO, mach_port_deallocate, CTLFLAG_RD,
+    &_kernelrpc_mach_port_deallocate_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for mach_port_deallocate "
+    "(2-arg syscall; -1 if registration failed)");
+
+SYSCTL_INT(_mach_syscall, OID_AUTO, mach_port_insert_right, CTLFLAG_RD,
+    &_kernelrpc_mach_port_insert_right_offset, 0,
+    "Dynamically-allocated FreeBSD syscall number for mach_port_insert_right "
+    "(4-arg syscall; -1 if registration failed)");
 
 static void
 wire_one(const char *name, int *offset, struct sysent *sy,
@@ -296,12 +416,30 @@ mach_syscall_wire_register(void *arg __unused)
 	    &host_self_trap_sysent, &host_self_trap_old_sysent);
 	wire_one("mach_msg_trap", &mach_msg_trap_offset,
 	    &mach_msg_trap_sysent, &mach_msg_trap_old_sysent);
+	wire_one("mach_port_allocate", &_kernelrpc_mach_port_allocate_offset,
+	    &_kernelrpc_mach_port_allocate_sysent,
+	    &_kernelrpc_mach_port_allocate_old_sysent);
+	wire_one("mach_port_deallocate", &_kernelrpc_mach_port_deallocate_offset,
+	    &_kernelrpc_mach_port_deallocate_sysent,
+	    &_kernelrpc_mach_port_deallocate_old_sysent);
+	wire_one("mach_port_insert_right", &_kernelrpc_mach_port_insert_right_offset,
+	    &_kernelrpc_mach_port_insert_right_sysent,
+	    &_kernelrpc_mach_port_insert_right_old_sysent);
 }
 
 static void
 mach_syscall_wire_deregister(void *arg __unused)
 {
 
+	unwire_one("mach_port_insert_right",
+	    &_kernelrpc_mach_port_insert_right_offset,
+	    &_kernelrpc_mach_port_insert_right_old_sysent);
+	unwire_one("mach_port_deallocate",
+	    &_kernelrpc_mach_port_deallocate_offset,
+	    &_kernelrpc_mach_port_deallocate_old_sysent);
+	unwire_one("mach_port_allocate",
+	    &_kernelrpc_mach_port_allocate_offset,
+	    &_kernelrpc_mach_port_allocate_old_sysent);
 	unwire_one("mach_msg_trap", &mach_msg_trap_offset,
 	    &mach_msg_trap_old_sysent);
 	unwire_one("host_self_trap", &host_self_trap_offset,

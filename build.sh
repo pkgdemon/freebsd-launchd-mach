@@ -234,6 +234,19 @@ cc -I"$WORK/rootfs/usr/include" \
    -lsystem_kernel
 ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libmach"
 
+# test_mach_port — exercises the three port-management traps wired
+# for the libxpc port (mach_port_allocate / _insert_right / _deallocate).
+# Runs after test_libmach in CI's run.sh; failure surfaces as
+# MACH-PORT-FAIL.
+echo "==> building test_mach_port"
+cc -I"$WORK/rootfs/usr/include" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_mach_port" \
+   "$ROOT/src/mach_kmod/tests/test_mach_port.c" \
+   -lsystem_kernel
+ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_mach_port"
+
 #
 # 3e. verify: assert install shape + ldconfig resolution + ldd resolves
 #     the test binary's libsystem_kernel.so.0 dep. Build fails fast here

@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include <mach/mach_traps.h>
+#include <mach/mach_port.h>
 #include <mach/message.h>
 
 #define	NO_SYSCALL	(-1)
@@ -152,4 +153,55 @@ mach_msg(mach_msg_header_t *msg, mach_msg_option_t option,
 	}
 	return ((mach_msg_return_t)syscall(num, msg, option,
 	    send_size, rcv_size, rcv_name, timeout));
+}
+
+/*
+ * Port-management traps. Same lazy-resolve pattern as the no-arg traps,
+ * but each takes >0 args. All three return kern_return_t (0 = success).
+ * On no mach.ko, return KERN_RESOURCE_SHORTAGE (6) — matches Apple's
+ * "couldn't allocate" convention.
+ *
+ * `task` is always the caller's task port (use mach_task_self()).
+ * The kernel-side wrappers ignore it and use current_task() — included
+ * in the userland API for Apple-source-code compatibility.
+ */
+kern_return_t
+mach_port_allocate(mach_port_name_t task, mach_port_right_t right,
+    mach_port_name_t *name)
+{
+	static int num = NO_SYSCALL;
+
+	if (num == NO_SYSCALL) {
+		num = resolve_syscall("mach_port_allocate");
+		if (num == NO_SYSCALL)
+			return (KERN_RESOURCE_SHORTAGE);
+	}
+	return ((kern_return_t)syscall(num, task, right, name));
+}
+
+kern_return_t
+mach_port_deallocate(mach_port_name_t task, mach_port_name_t name)
+{
+	static int num = NO_SYSCALL;
+
+	if (num == NO_SYSCALL) {
+		num = resolve_syscall("mach_port_deallocate");
+		if (num == NO_SYSCALL)
+			return (KERN_RESOURCE_SHORTAGE);
+	}
+	return ((kern_return_t)syscall(num, task, name));
+}
+
+kern_return_t
+mach_port_insert_right(mach_port_name_t task, mach_port_name_t name,
+    mach_port_t poly, mach_msg_type_name_t polyPoly)
+{
+	static int num = NO_SYSCALL;
+
+	if (num == NO_SYSCALL) {
+		num = resolve_syscall("mach_port_insert_right");
+		if (num == NO_SYSCALL)
+			return (KERN_RESOURCE_SHORTAGE);
+	}
+	return ((kern_return_t)syscall(num, task, name, poly, polyPoly));
 }

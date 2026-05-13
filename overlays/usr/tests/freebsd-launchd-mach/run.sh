@@ -45,6 +45,26 @@ else
     exit 1
 fi
 
+# 2b. userland: mach_port_allocate / _insert_right / _deallocate
+# traps. These are the three new syscalls Phase F-prep wired so the
+# ravynOS-fork libxpc can allocate Mach ports beyond the
+# task/thread/host/reply family. The test allocates a receive-right
+# port, attaches a send right onto the same name, sends and drains a
+# self-message through it, then drops the send right — full
+# allocate-use-deallocate round-trip.
+if [ -x /usr/tests/freebsd-launchd-mach/test_mach_port ]; then
+    if /usr/tests/freebsd-launchd-mach/test_mach_port; then
+        echo "MACH-PORT-OK: mach_port_* round-trip succeeded"
+    else
+        rc=$?
+        echo "MACH-PORT-FAIL: test_mach_port exit=$rc"
+        exit 1
+    fi
+else
+    echo "MACH-PORT-FAIL: test_mach_port binary not installed"
+    exit 1
+fi
+
 # 3. userland: libdispatch loads + serial queue executes a sync callback.
 # Baseline check that the vendored swift-corelibs-libdispatch (built
 # in our chroot pipeline, installed to /usr/lib/libsystem/) is loadable
