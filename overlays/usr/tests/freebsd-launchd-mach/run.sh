@@ -66,14 +66,17 @@ else
     exit 1
 fi
 
-# 4. Mach IPC backend stub: confirm DISPATCH_SOURCE_TYPE_MACH_RECV /
-# _SEND symbols are exported by libsystem_dispatch.so + dispatch_source_
-# create with MACH_RECV returns NULL gracefully via our stub backend
-# (no crash). Real polling-thread receive lands later; this stub
-# unblocks future libxpc linking.
+# 4. Mach IPC backend round-trip: DISPATCH_SOURCE_TYPE_MACH_RECV with
+# the real polling-thread backend (event_mach_freebsd.c) — allocate a
+# port via mach_reply_port, attach a dispatch source, self-send a
+# message, verify the handler fires within 5s and consumes it. Proves:
+# event_mach_freebsd.c spawns a working poll thread; mach_msg(MACH_RCV_
+# LARGE, rcv_size=0) peek path returns TOO_LARGE without consuming;
+# dispatch_source_merge_data wakes the handler; handler's mach_msg(
+# MACH_RCV_MSG) drains the message; clean cancel/release teardown.
 if [ -x /usr/tests/freebsd-launchd-mach/test_libdispatch_mach ]; then
     if /usr/tests/freebsd-launchd-mach/test_libdispatch_mach; then
-        echo "LIBDISPATCH-MACH-OK: Mach source-type symbols present"
+        echo "LIBDISPATCH-MACH-OK: Mach RECV round-trip succeeded"
     else
         rc=$?
         echo "LIBDISPATCH-MACH-FAIL: test_libdispatch_mach exit=$rc"

@@ -341,12 +341,15 @@ cc -I"$WORK/rootfs/usr/include" \
    -ldispatch -lpthread
 
 echo "==> building test_libdispatch_mach"
+# Links libsystem_kernel for the userland mach_reply_port / mach_msg
+# trap shims the round-trip test uses to allocate a receive port and
+# self-send through the kernel.
 cc -I"$WORK/rootfs/usr/include" \
    -L"$WORK/rootfs/usr/lib/libsystem" \
    -Wl,-rpath,/usr/lib/libsystem \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libdispatch_mach" \
    "$ROOT/src/libdispatch-tests/test_libdispatch_mach.c" \
-   -ldispatch -lpthread
+   -ldispatch -lsystem_kernel -lpthread
 
 #
 # 3h. verify libdispatch install shape + ldconfig + ldd resolution.

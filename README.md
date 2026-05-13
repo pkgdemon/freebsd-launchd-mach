@@ -96,17 +96,49 @@ as the design doc:
   defines `_dispatch_source_type_mach_send/recv` plus the internal
   `_dispatch_mach_type_*` and `_dispatch_xpc_type_sigterm` symbols
   (link-level only; `dispatch_source_create` with a `MACH_*` type
-  returns NULL safely). Real polling-thread receive (using
-  `mach_msg_trap` from `libsystem_kernel`) is the next session's work.
+  returns NULL safely). MACH_RECV gets a real polling-thread
+  implementation in Phase E; SEND and the internal types stay as
+  link-only stubs.
 - **CI smoke** at this checkpoint: 4/4 markers green on the live ISO
   &mdash; `MACH-SMOKE-OK`, `LIBSYSTEM-KERNEL-OK`, `LIBDISPATCH-OK`,
   `LIBDISPATCH-MACH-OK`.
 
-**Next** &mdash; replace the stub `event_mach_freebsd.c` with a real
-polling-thread Mach receive implementation (per-source pthread, message
-loop calling `mach_msg_trap(MACH_RCV_MSG | MACH_RCV_TIMEOUT)`, hook into
-libdispatch's source state machine), then start the libxpc port on top.
-Plan docs:
+**Phase E** &mdash; *real `DISPATCH_SOURCE_TYPE_MACH_RECV` backend* &mdash;
+*done.* The stub `event_mach_freebsd.c` is now a working polling-thread
+implementation. `dispatch_source_create(DISPATCH_SOURCE_TYPE_MACH_RECV,
+port, 0, q)` returns a live source backed by:
+
+- A per-source detached `pthread` that loops on `mach_msg(MACH_RCV_MSG |
+  MACH_RCV_LARGE | MACH_RCV_TIMEOUT, rcv_size=0, port, 100ms)`. The
+  `MACH_RCV_LARGE` + `rcv_size=0` trick gets `MACH_RCV_TOO_LARGE`
+  back from the kernel *without* consuming the message (ravynOS's
+  `ipc_mqueue.c` honors the "don't take it off the queue" branch on
+  the `LARGE` option). The polling thread fires
+  `dispatch_source_merge_data(ds, 1)` on the no-msg&rarr;msg edge so
+  libdispatch schedules the user's event handler; the handler reads
+  the message itself via `mach_msg(MACH_RCV_MSG, ...)`. Apple's
+  documented contract for `MACH_RECV` sources.
+- Lifecycle: the thread `_dispatch_retain`s the source as soon as
+  `du_owner_wref` is populated, which pins the unote (source dispose
+  is what frees the `dispatch_source_refs_s`). The thread exits when
+  `dispatch_source_testcancel(ds)` becomes true, then
+  `_dispatch_release`s &mdash; breaking the retain so the source / unote
+  dealloc normally. No kernel patches; no `HAVE_MACH`; no
+  `EVFILT_MACHPORG`.
+- libsystem_kernel header (`mach/message.h`) now ships `MACH_RCV_LARGE`,
+  `MACH_RCV_TOO_LARGE`, `MACH_MSG_TYPE_MAKE_SEND_ONCE`, and the
+  `MACH_MSGH_BITS()` packing macro &mdash; the userland surface needed
+  to construct send-once self-messages and run the new round-trip test.
+- `test_libdispatch_mach` upgraded from stub-link check to a true
+  round-trip: allocates a receive port via `mach_reply_port`, attaches
+  a `MACH_RECV` source, sends a self-message via
+  `MACH_MSG_TYPE_MAKE_SEND_ONCE`, asserts the handler fires within 5
+  seconds and `msgh_id` survives the kernel hop. Same `LIBDISPATCH-MACH-OK`
+  CI marker, stronger meaning.
+- CI smoke at this checkpoint: still 4/4 markers green on the live ISO.
+
+**Next** &mdash; start the libxpc port on top of the live Mach RECV
+backend. Plan docs:
 
 - [**`freebsd-libxpc-plan`**](https://pkgdemon.github.io/freebsd-libxpc-plan.html)
   &mdash; phased porting plan for libxpc on top of mach.ko. Phase 0 was

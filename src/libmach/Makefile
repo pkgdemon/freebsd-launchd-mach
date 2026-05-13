@@ -10,6 +10,7 @@
 #     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so
 #     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so.0
 #     ${DESTDIR}/usr/include/mach/mach_traps.h
+#     ${DESTDIR}/usr/include/mach/message.h
 #     ${DESTDIR}/usr/libdata/pkgconfig/libsystem_kernel.pc
 
 LIB=		system_kernel
@@ -20,7 +21,8 @@ CFLAGS+=	-I${.CURDIR}/include
 NO_MAN=		yes
 WARNS?=		6
 
-INCS=		include/mach/mach_traps.h
+INCS=		include/mach/mach_traps.h \
+		include/mach/message.h
 INCSDIR=	${PREFIX}/include/mach
 LIBDIR=		${PREFIX}/lib/libsystem
 

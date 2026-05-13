@@ -36,12 +36,30 @@ typedef struct {
 #define MACH_MSG_OPTION_NONE	0x00000000
 #define MACH_SEND_MSG		0x00000001
 #define MACH_RCV_MSG		0x00000002
+#define MACH_RCV_LARGE		0x00000004
 #define MACH_SEND_TIMEOUT	0x00000010
 #define MACH_RCV_TIMEOUT	0x00000100
 
-/* Return codes we care about for the C3 test. Full set in Apple/mach.h. */
+/* Return codes we care about. Full set in sys/mach/message.h. */
 #define MACH_MSG_SUCCESS	0x00000000
 #define MACH_RCV_TIMED_OUT	0x10004003
+#define MACH_RCV_TOO_LARGE	0x10004004
+
+/*
+ * msgh_bits port-disposition values (subset of MACH_MSG_TYPE_*). 21 =
+ * MAKE_SEND_ONCE — sender constructs a send-once right from a receive
+ * right it owns, which is the path used to send a message to one's own
+ * receive port (e.g., self-test wakeups for the libdispatch Mach RECV
+ * polling thread).
+ */
+#define MACH_MSG_TYPE_MAKE_SEND_ONCE	21
+
+/*
+ * MACH_MSGH_BITS(remote, local) — pack a remote-port and local-port
+ * disposition into msgh_bits. Matches sys/mach/message.h.
+ */
+#define MACH_MSGH_BITS(remote, local) \
+	((remote) | ((local) << 8))
 
 mach_msg_return_t mach_msg(
     mach_msg_header_t *msg,
