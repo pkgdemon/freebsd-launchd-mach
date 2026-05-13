@@ -209,6 +209,17 @@ expect {
 }
 expect {
     timeout {
+        puts "\nFAIL: BOOTSTRAP-REMOTE marker not seen"
+        exit 1
+    }
+    "BOOTSTRAP-REMOTE-FAIL" {
+        puts "\nFAIL: cross-process bootstrap round-trip failed"
+        exit 1
+    }
+    "BOOTSTRAP-REMOTE-OK" { puts "\nOK: cross-process bootstrap works" }
+}
+expect {
+    timeout {
         puts "\nFAIL: LIBDISPATCH marker not seen"
         exit 1
     }

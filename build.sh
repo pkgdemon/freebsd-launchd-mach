@@ -299,6 +299,37 @@ cc -I"$WORK/rootfs/usr/include" \
    -lsystem_kernel -lpthread
 ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap"
 
+# bootstrap_server — Phase G2c standalone daemon. Allocates the
+# service port, publishes via host_set_special_port, runs the
+# bootstrap_server_run loop until SIGTERM. Installs to
+# /usr/local/sbin/; run.sh starts/stops it for the smoke test.
+echo "==> building bootstrap_server"
+mkdir -p "$WORK/rootfs/usr/local/sbin"
+cc -I"$WORK/rootfs/usr/include" \
+   -I"$ROOT/src/bootstrap" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/local/sbin/bootstrap_server" \
+   "$ROOT/src/bootstrap/bootstrap_server.c" \
+   "$ROOT/src/bootstrap/libbootstrap.c" \
+   -lsystem_kernel -lpthread
+ls -lh "$WORK/rootfs/usr/local/sbin/bootstrap_server"
+
+# test_bootstrap_remote — Phase G2d cross-process client. Validates
+# that a fresh process finds the daemon via task_get_bootstrap_port
+# (host fallback) and round-trips check_in/look_up over real Mach
+# IPC. run.sh starts the daemon before this runs, kills it after.
+echo "==> building test_bootstrap_remote"
+cc -I"$WORK/rootfs/usr/include" \
+   -I"$ROOT/src/bootstrap" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap_remote" \
+   "$ROOT/src/bootstrap/tests/test_bootstrap_remote.c" \
+   "$ROOT/src/bootstrap/libbootstrap.c" \
+   -lsystem_kernel -lpthread
+ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap_remote"
+
 #
 # 3e. verify: assert install shape + ldconfig resolution + ldd resolves
 #     the test binary's libsystem_kernel.so.0 dep. Build fails fast here

@@ -144,6 +144,41 @@ else
     exit 1
 fi
 
+# 2e. cross-process bootstrap (Phase G2d). Starts the standalone
+# bootstrap_server daemon in the background; it publishes its
+# service port as HOST_BOOTSTRAP_PORT host-wide. Then runs
+# test_bootstrap_remote in a fresh process — that process has no
+# per-task bootstrap slot set, so task_get_bootstrap_port falls
+# back to the host slot the daemon populated. check_in / look_up
+# round-trip over real cross-task Mach IPC validates the complex
+# port-descriptor path G2a added. trap-on-exit kills the daemon
+# regardless of test outcome so we don't leak it into the next
+# test.
+if [ -x /usr/local/sbin/bootstrap_server ] && \
+   [ -x /usr/tests/freebsd-launchd-mach/test_bootstrap_remote ]; then
+    /usr/local/sbin/bootstrap_server &
+    BOOTSTRAP_PID=$!
+    trap 'kill $BOOTSTRAP_PID 2>/dev/null; wait $BOOTSTRAP_PID 2>/dev/null' EXIT INT TERM
+    # Give the daemon a beat to allocate its port + register host slot.
+    sleep 1
+    if /usr/tests/freebsd-launchd-mach/test_bootstrap_remote; then
+        echo "BOOTSTRAP-REMOTE-OK: cross-process bootstrap round-trip succeeded"
+    else
+        rc=$?
+        echo "BOOTSTRAP-REMOTE-FAIL: test_bootstrap_remote exit=$rc"
+        kill $BOOTSTRAP_PID 2>/dev/null || true
+        wait $BOOTSTRAP_PID 2>/dev/null || true
+        trap - EXIT INT TERM
+        exit 1
+    fi
+    kill $BOOTSTRAP_PID 2>/dev/null || true
+    wait $BOOTSTRAP_PID 2>/dev/null || true
+    trap - EXIT INT TERM
+else
+    echo "BOOTSTRAP-REMOTE-FAIL: bootstrap_server or test_bootstrap_remote binary not installed"
+    exit 1
+fi
+
 # 4. Mach IPC backend round-trip: DISPATCH_SOURCE_TYPE_MACH_RECV with
 # the real polling-thread backend (event_mach_freebsd.c) — allocate a
 # port via mach_reply_port, attach a dispatch source, self-send a
