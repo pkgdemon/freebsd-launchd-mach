@@ -137,8 +137,33 @@ port, 0, q)` returns a live source backed by:
   CI marker, stronger meaning.
 - CI smoke at this checkpoint: still 4/4 markers green on the live ISO.
 
-**Next** &mdash; start the libxpc port on top of the live Mach RECV
-backend. Plan docs:
+**Next** &mdash; implement libdispatch's `dispatch_mach_t` channel API
+(or the subset libxpc needs) on top of the Phase E foundation, *then*
+libxpc. Phase E only delivered `DISPATCH_SOURCE_TYPE_MACH_RECV` (a
+single source type) plus link-only stubs for SEND / `_dispatch_mach_
+type_*` / `_dispatch_xpc_type_sigterm`. libxpc doesn't use those types
+directly &mdash; it uses the higher-level **channel** API
+(`dispatch_mach_create` / `dispatch_mach_connect` / `dispatch_mach_send`
+/ `dispatch_mach_msg_create` / etc.) which lives in libdispatch's
+`src/mach.c` (~3,250 LOC, all gated on `HAVE_MACH`) and `src/voucher.c`
+and is currently absent from our build entirely &mdash; not even the
+function symbols exist, since the file isn't compiled. So:
+
+1. **Channel API port.** Either enable `HAVE_MACH` and shim the
+   missing Apple bits (`mach_port_construct`, vouchers, MIG, etc.),
+   or implement a non-`HAVE_MACH` subset of `src/mach.c` on top of
+   our polling-thread RECV + libsystem_kernel `mach_msg`. Wire up
+   the SEND-side notifications (`MACH_NOTIFY_NO_SENDERS`,
+   `MACH_NOTIFY_DEAD_NAME`) the Apple `dispatch_mach_t` state
+   machine expects.
+2. **Bootstrap server** for service-name lookup (a small daemon
+   that maps `com.apple.foo` &harr; mach port; everything else asks
+   it for service ports at connect time).
+3. **libxpc itself**, on top of (1) + (2).
+
+Plan docs (some predate the Phase E findings &mdash; the original
+"Phase 0" was scoped narrower than what `dispatch_mach_t` actually
+demands):
 
 - [**`freebsd-libxpc-plan`**](https://pkgdemon.github.io/freebsd-libxpc-plan.html)
   &mdash; phased porting plan for libxpc on top of mach.ko. Phase 0 was
