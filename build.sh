@@ -307,6 +307,9 @@ rsync -a --delete "$ROOT/src/libdispatch/" "$WORK/rootfs/tmp/libdispatch/"
 
 echo "==> building libdispatch in chroot"
 chroot "$WORK/rootfs" /bin/sh -ex <<'CHROOT_DISPATCH'
+# Chroot inherits caller's PATH which may not include /usr/local/bin
+# where pkg installs cmake / ninja. Set explicitly.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 mkdir -p /tmp/libdispatch-build
 cd /tmp/libdispatch-build
 cmake -G Ninja /tmp/libdispatch \
