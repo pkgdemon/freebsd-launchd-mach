@@ -163,6 +163,17 @@ expect {
     }
     "LIBSYSTEM-KERNEL-OK" { puts "\nOK: libsystem_kernel works" }
 }
+expect {
+    timeout {
+        puts "\nFAIL: LIBDISPATCH marker not seen"
+        exit 1
+    }
+    "LIBDISPATCH-FAIL" {
+        puts "\nFAIL: libdispatch baseline roundtrip failed"
+        exit 1
+    }
+    "LIBDISPATCH-OK" { puts "\nOK: libdispatch baseline works" }
+}
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns
 # halt -p into a clean shutdown rather than a reset loop).

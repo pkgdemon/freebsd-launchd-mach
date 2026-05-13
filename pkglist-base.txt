@@ -87,10 +87,11 @@ FreeBSD-pam-lib
 FreeBSD-pam
 
 # ---- transitive runtime libs (pinned so they don't get autoremoved) ----
-# libBlocksRuntime: per FreeBSD 15 base ships Block.h + libBlocksRuntime
-#   (memory: freebsd_blocksruntime_in_base) — gershwin's libdispatch
-#   defers to base for it.
-FreeBSD-libblocksruntime
+# libBlocksRuntime: dropped 2026-05-13 — we ship Block.h +
+# libBlocksRuntime ourselves via the vendored swift-corelibs-libdispatch
+# build under src/libdispatch (its bundled BlocksRuntime is upstream
+# Apple compiler-rt, same source FreeBSD-libblocksruntime is built
+# from). See libdispatch+mach spike §6.2 + install layout spike §15.
 FreeBSD-libcasper
 FreeBSD-libthread_db
 # Note: there is no FreeBSD-libcompiler_rt runtime pkg — only the -dev

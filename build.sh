@@ -285,6 +285,92 @@ chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libmach \
 echo "==> libsystem_kernel install verified"
 
 #
+# 3f. build libdispatch from src/libdispatch (vendored swift-corelibs-
+#     libdispatch + FreeBSD perf patch). cmake/ninja build inside the
+#     chroot using buildpkgs already installed (clang, lld, cmake,
+#     ninja). Installs:
+#       /usr/lib/libsystem/libdispatch.so + .so.0 (the lib)
+#       /usr/lib/libsystem/libBlocksRuntime.so + .so.0 (bundled — replaces
+#         the dropped FreeBSD-libblocksruntime pkg; same upstream Apple
+#         compiler-rt source)
+#       /usr/include/dispatch/*.h
+#       /usr/include/os/*.h
+#       /usr/include/Block.h + Block_private.h
+#     Plus libsystem_dispatch / libsystem_blocks symlinks for Apple-
+#     canonical naming (per install-layout-spike §4 + §15). Proper
+#     SONAME rename to libsystem_dispatch is a future cleanup; symlinks
+#     keep both -ldispatch and -lsystem_dispatch link lines working.
+#
+echo "==> rsyncing src/libdispatch to chroot"
+mkdir -p "$WORK/rootfs/tmp/libdispatch"
+rsync -a --delete "$ROOT/src/libdispatch/" "$WORK/rootfs/tmp/libdispatch/"
+
+echo "==> building libdispatch in chroot"
+chroot "$WORK/rootfs" /bin/sh -ex <<'CHROOT_DISPATCH'
+mkdir -p /tmp/libdispatch-build
+cd /tmp/libdispatch-build
+cmake -G Ninja /tmp/libdispatch \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib/libsystem \
+    -DINSTALL_DISPATCH_HEADERS_DIR=/usr/include/dispatch \
+    -DINSTALL_BLOCK_HEADERS_DIR=/usr/include \
+    -DINSTALL_OS_HEADERS_DIR=/usr/include/os \
+    -DINSTALL_PRIVATE_HEADERS=ON \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_BUILD_TYPE=Release
+ninja
+ninja install
+CHROOT_DISPATCH
+
+echo "==> creating libsystem_dispatch / libsystem_blocks symlinks"
+ln -sf libdispatch.so       "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so"
+ln -sf libdispatch.so.0     "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so.0"
+ln -sf libBlocksRuntime.so   "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so"
+ln -sf libBlocksRuntime.so.0 "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so.0" 2>/dev/null || true
+
+# Re-prime ldconfig hints now that libdispatch + BlocksRuntime are
+# installed at /usr/lib/libsystem.
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+
+# Cleanup chroot build artifacts.
+rm -rf "$WORK/rootfs/tmp/libdispatch" "$WORK/rootfs/tmp/libdispatch-build"
+
+#
+# 3g. build the libdispatch smoke test binary, install to
+#     /usr/tests/freebsd-launchd-mach/test_libdispatch.
+#
+echo "==> building test_libdispatch"
+cc -I"$WORK/rootfs/usr/include" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libdispatch" \
+   "$ROOT/src/libdispatch-tests/test_libdispatch.c" \
+   -ldispatch -lpthread
+
+#
+# 3h. verify libdispatch install shape + ldconfig + ldd resolution.
+#
+echo "==> verifying libdispatch install"
+ls -la "$WORK/rootfs/usr/lib/libsystem/" || true
+test -f "$WORK/rootfs/usr/lib/libsystem/libdispatch.so.0" \
+    || { echo "FAIL: libdispatch.so.0 missing"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/libsystem/libdispatch.so" \
+    || { echo "FAIL: libdispatch.so symlink missing"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so.0" \
+    || { echo "FAIL: libsystem_dispatch.so.0 symlink missing"; exit 1; }
+test -f "$WORK/rootfs/usr/include/Block.h" \
+    || { echo "FAIL: /usr/include/Block.h missing (libdispatch should ship it)"; exit 1; }
+test -f "$WORK/rootfs/usr/include/dispatch/dispatch.h" \
+    || { echo "FAIL: /usr/include/dispatch/dispatch.h missing"; exit 1; }
+chroot "$WORK/rootfs" ldconfig -r | grep -q libdispatch \
+    || { echo "FAIL: ldconfig hints missing libdispatch"; exit 1; }
+chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libdispatch \
+    | grep -q "libdispatch.so.0 => /usr/lib/libsystem/" \
+    || { echo "FAIL: ldd doesn't resolve test_libdispatch to /usr/lib/libsystem/"; exit 1; }
+echo "==> libdispatch install verified"
+
+#
 # 4. apply local overlays (etc/rc.conf, etc/motd.template,
 #    /usr/tests/freebsd-launchd-mach/, ...). No "slim" rm -rf step:
 #    pkg curation owns rootfs content end-to-end. If something
