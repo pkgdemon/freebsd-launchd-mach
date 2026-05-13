@@ -174,6 +174,16 @@ EOF
             pkg autoremove -y || true
     fi
 
+    # Clean the pkg download cache — every pkg we installed left its
+    # .pkg archive in /var/cache/pkg/ regardless of whether the pkg was
+    # later deleted. Without this, the rootfs.uzip carries hundreds of
+    # MB of cached archives we never need at runtime (FreeBSD-clang
+    # alone is ~50 MB compressed). pkg delete touches installed files,
+    # not the cache; pkg clean -a is what empties the cache.
+    echo "==> cleaning pkg download cache"
+    chroot "$WORK/rootfs" env ASSUME_ALWAYS_YES=yes \
+        pkg clean -a -y || true
+
     cleanup_chroot
     trap - EXIT INT TERM
 fi
