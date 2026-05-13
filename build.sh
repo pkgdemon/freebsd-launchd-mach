@@ -301,13 +301,25 @@ ninja
 ninja install
 CHROOT_DISPATCH
 
-echo "==> creating libsystem_dispatch / libsystem_blocks symlinks"
+echo "==> creating libdispatch / libsystem_dispatch / libsystem_blocks symlinks"
 # libdispatch's CMakeLists doesn't set SOVERSION — output is just
 # libdispatch.so (unversioned), no .so.0. DT_SONAME is empty, so
 # consumers' DT_NEEDED becomes the filename (libdispatch.so).
-# Symlink both Apple-canonical names to the unversioned file.
+#
+# Issue: FreeBSD's ldconfig only indexes libs matching lib*.so.[0-9]+
+# in its hints DB. An unversioned lib*.so is on disk but invisible to
+# rtld via the hints lookup. Programs without RPATH/RUNPATH would fail
+# to dlopen libdispatch by sonname.
+#
+# Workaround: create .so.0 symlinks pointing at the unversioned file so
+# ldconfig's glob matches. Cleaner long-term fix: patch libdispatch's
+# CMakeLists to set SOVERSION + OUTPUT_NAME=system_dispatch.
+ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/libsystem/libdispatch.so.0"
+ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/libsystem/libBlocksRuntime.so.0"
 ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so"
+ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so.0"
 ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so"
+ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so.0"
 
 # Re-prime ldconfig hints now that libdispatch + BlocksRuntime are
 # installed at /usr/lib/libsystem.
