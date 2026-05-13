@@ -134,13 +134,14 @@ expect {
     -re {[#%$] $} { puts "\nOK: at root shell prompt" }
 }
 
-# Stage 3: smoke-check that mach.ko is loaded. Replaces the rc.local
-# marker — test logic lives in CI now, not on the ISO. The shell
-# emits MACH-SMOKE-OK on success or MACH-SMOKE-FAIL on failure.
-send "kldstat -m mach >/dev/null 2>&1 && echo MACH-SMOKE-OK || echo MACH-SMOKE-FAIL\r"
+# Stage 3: invoke the on-ISO mach smoke test. Test scripts live under
+# /usr/tests/<component>/ following the FreeBSD convention. Each
+# prints MACH-SMOKE-OK or MACH-SMOKE-FAIL on its own line; CI matches
+# either marker.
+send "/usr/tests/freebsd-launchd-mach/run.sh\r"
 expect {
     timeout {
-        puts "\nFAIL: smoke test command timed out"
+        puts "\nFAIL: /usr/tests/freebsd-launchd-mach/run.sh timed out"
         exit 1
     }
     "MACH-SMOKE-FAIL" {
