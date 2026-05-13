@@ -17,9 +17,8 @@ macOS compatibility is a bonus; the goal is a more modern FreeBSD.
 
 **Phase A** &mdash; *done.* ISO build pipeline lifted from
 [`freebsd-launchd`](https://github.com/pkgdemon/freebsd-launchd) works in
-CI; live ISO boots stock FreeBSD `init` as PID 1 with gershwin/GNUstep
-system-domain libraries (libdispatch, libobjc2, libs-base, libs-corebase)
-pre-installed under `/System/Library/`.
+CI; live ISO boots stock FreeBSD `init` as PID 1. Curated pkgbase install
+(no full `base.txz`/`kernel.txz` extraction) keeps the rootfs lean.
 
 **Phase B** &mdash; *done.* ravynOS's `sys/compat/mach/` ported as an
 out-of-tree `mach.ko`. Build gate and runtime gate both met: module
@@ -64,18 +63,66 @@ of the kmod:
 Total smoke at this checkpoint: **19/19 green** on stock FreeBSD-15
 with zero kernel patches.
 
-**Next** &mdash; libxpc plus the supporting layers. Two new plan docs
-were produced before code starts:
+**Phase D** &mdash; *pkgbase + libsystem layout* &mdash; *done.* Pivoted
+away from gershwin-developer's `/System/Library/Libraries/` for our
+system libraries. Apple-canonical `libsystem_*` layout under
+`/usr/lib/libsystem/` instead, with the
+[install layout spike](https://pkgdemon.github.io/freebsd-libxpc-install-layout-spike.html)
+as the design doc:
+
+- **Pkgbase migration.** ISO base now installed via curated
+  `FreeBSD-*` pkgbase set (`pkglist-base.txt` + `buildpkgs-base.txt`)
+  rather than `base.txz`/`kernel.txz` extraction. Lets us omit
+  kerberos / lldb / dtrace / audit (runtime) / hyperv-tools /
+  bsdinstall / etc. that base.txz had no opt-out for.
+- **`libmach` &rarr; `libsystem_kernel`.** Renamed and relocated to
+  `/usr/lib/libsystem/libsystem_kernel.so` with `libsystem_kernel.pc`
+  pkg-config and headers at `/usr/include/mach/`. ldconfig drop-in at
+  `/usr/local/libdata/ldconfig/freebsd-launchd-mach` registers
+  `/usr/lib/libsystem` with the runtime linker.
+- **`swift-corelibs-libdispatch` vendored** under
+  [`src/libdispatch/`](src/libdispatch/), built in our `build.sh`
+  chroot pipeline (cmake/ninja). gershwin-developer's FreeBSD
+  performance patch (`event_kevent.c` timer fixes +
+  `workqueue.c` loop-var typo) applied as a commit on the vendored
+  tree. Installs as `/usr/lib/libsystem/libdispatch.so`.
+- **`Block.h` + `libBlocksRuntime.so`** ship from libdispatch's bundled
+  BlocksRuntime sources (Apple compiler-rt &mdash; same upstream as the
+  former `FreeBSD-libblocksruntime` pkg, which is dropped). Single
+  source of truth on the system, owned by us.
+- **`libsystem_dispatch.so` / `libsystem_blocks.so`** symlinks for
+  Apple-canonical link names (`-lsystem_dispatch`).
+- **Mach source-type stubs** &mdash; `src/libdispatch/src/event/event_mach_freebsd.c`
+  defines `_dispatch_source_type_mach_send/recv` plus the internal
+  `_dispatch_mach_type_*` and `_dispatch_xpc_type_sigterm` symbols
+  (link-level only; `dispatch_source_create` with a `MACH_*` type
+  returns NULL safely). Real polling-thread receive (using
+  `mach_msg_trap` from `libsystem_kernel`) is the next session's work.
+- **CI smoke** at this checkpoint: 4/4 markers green on the live ISO
+  &mdash; `MACH-SMOKE-OK`, `LIBSYSTEM-KERNEL-OK`, `LIBDISPATCH-OK`,
+  `LIBDISPATCH-MACH-OK`.
+
+**Next** &mdash; replace the stub `event_mach_freebsd.c` with a real
+polling-thread Mach receive implementation (per-source pthread, message
+loop calling `mach_msg_trap(MACH_RCV_MSG | MACH_RCV_TIMEOUT)`, hook into
+libdispatch's source state machine), then start the libxpc port on top.
+Plan docs:
 
 - [**`freebsd-libxpc-plan`**](https://pkgdemon.github.io/freebsd-libxpc-plan.html)
-  &mdash; phased porting plan for libxpc on top of mach.ko. Phase 0
-  starts with a libdispatch Mach backend (new `event_mach_freebsd.c`
-  source file shipped as a patch to gershwin-developer); subsequent
-  phases fork libxpc from ravynOS's tree, add a bootstrap server,
-  swap freebsd-launchd's daemon for a clean Apple `launchd-842.92.1`
-  import, build a hybrid CoreFoundation library, and finally bring up
-  configd. Also audits the related daemons (asl, notifyd, IPConfiguration,
-  mDNSResponder).
+  &mdash; phased porting plan for libxpc on top of mach.ko. Phase 0 was
+  the libdispatch Mach backend; subsequent phases fork libxpc from
+  ravynOS's tree, add a bootstrap server, swap freebsd-launchd's daemon
+  for a clean Apple `launchd-842.92.1` import, build a hybrid
+  CoreFoundation library, and finally bring up configd. Also audits the
+  related daemons (asl, notifyd, IPConfiguration, mDNSResponder).
+- [**`freebsd-libxpc-install-layout-spike`**](https://pkgdemon.github.io/freebsd-libxpc-install-layout-spike.html)
+  &mdash; per-component install-path decisions across the four
+  candidate layouts (Apple macOS reference, `/usr/lib/libsystem/`,
+  gershwin `/System/Library/`, FreeBSD-base `/usr/lib`). Drives the
+  Phase D layout above.
+- [**`freebsd-libxpc-libdispatch-mach-spike`**](https://pkgdemon.github.io/freebsd-libxpc-libdispatch-mach-spike.html)
+  &mdash; libdispatch Mach-backend design + vendoring + build
+  integration story.
 - [**`freebsd-libxpc-foundation-spike`**](https://pkgdemon.github.io/freebsd-libxpc-foundation-spike.html)
   &mdash; companion spike. Concludes that libgnustep-base alone serves
   every component that needs Foundation, libgnustep-corebase plus a new
