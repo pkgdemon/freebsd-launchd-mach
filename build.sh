@@ -219,6 +219,12 @@ ls -lh "$WORK/rootfs/boot/kernel/mach.ko"
 #       /usr/libdata/pkgconfig/libsystem_kernel.pc
 #
 echo "==> building libsystem_kernel (src/libmach)"
+# bsd.lib.mk's install doesn't auto-create LIBDIR / INCSDIR / FILESDIR;
+# pre-create them since /usr/lib/libsystem is our convention (not a
+# stock FreeBSD path) so pkgbase doesn't ship it.
+mkdir -p "$WORK/rootfs/usr/lib/libsystem" \
+         "$WORK/rootfs/usr/include/mach" \
+         "$WORK/rootfs/usr/libdata/pkgconfig"
 make -C "$ROOT/src/libmach" \
     DESTDIR="$WORK/rootfs" \
     PREFIX=/usr \
