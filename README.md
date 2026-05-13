@@ -139,7 +139,7 @@ port, 0, q)` returns a live source backed by:
 
 **Phase F (port-management syscalls)** &mdash; *done.* Three new
 Mach traps wired into mach.ko + exposed through libsystem_kernel,
-prerequisites for the ravynOS-fork libxpc:
+prerequisites for the ravynOS-fork libxpc and the bootstrap server:
 
 - `mach_port_allocate(task, right, &name)` — allocate a fresh port
   (RECEIVE / SEND / PORT_SET / DEAD_NAME). Syscall 215 on amd64.
@@ -164,15 +164,48 @@ prerequisites for the ravynOS-fork libxpc:
   `MACH-PORT-OK` between `LIBSYSTEM-KERNEL-OK` and `LIBDISPATCH-OK`.
   5/5 markers green.
 
-**Next** &mdash; the remaining two steps in the libxpc plan:
+**Phase G prereqs (`task_get_special_port` / `task_set_special_port`)**
+&mdash; *done.* Two more wired Mach traps that let userland publish
+and retrieve `TASK_BOOTSTRAP_PORT` directly (Apple delivers these
+over MIG; we expose as syscalls since we don't ship MIG). New
+header `mach/task_special_ports.h` with the Apple-canonical
+`task_get_bootstrap_port` / `task_set_bootstrap_port` macros. Smoke
+marker: `TASK-SPECIAL-PORT-OK`.
 
-1. **Bootstrap server** (`bootstrap_check_in` / `bootstrap_look_up`
-   against a `bootstrap_port` global). A small daemon that maps
-   service names to Mach ports; everything else asks it for service
-   ports at connect time.
-2. **Fork ravynOS's `lib/libxpc/` into this repo**, build it
-   against our libsystem_kernel + libdispatch + the bootstrap
-   server. Smoke marker: `LIBXPC-OK`.
+**Phase G1 (bootstrap protocol &mdash; single task)** &mdash; *done.*
+Hand-rolled message-ID dispatch over Mach IPC (no MIG):
+
+- `bootstrap_check_in(bp, name, *port)` / `bootstrap_look_up(bp,
+  name, *port)` matching libxpc's call signatures, declared at
+  `/usr/include/servers/bootstrap.h`.
+- `bootstrap_server_run(service_port, *stop)` server loop. Receives
+  with a 500ms cancel-poll timeout, dispatches on `msgh_id`,
+  replies using `MOVE_SEND_ONCE` to the request's `msgh_remote_port`
+  (the kernel-manufactured send-once right from the client's
+  `MAKE_SEND_ONCE`).
+- Service map is a 64-slot static array in the server's address
+  space &mdash; same-task scope only. Cross-process scope (Phase G2)
+  lifts this to a real daemon + complex-message port-descriptor
+  transfer.
+- Smoke marker `BOOTSTRAP-OK`. Test allocates a service port,
+  publishes it via `task_set_bootstrap_port`, spawns a pthread
+  running `bootstrap_server_run`, calls `bootstrap_check_in` then
+  `bootstrap_look_up` for the same name from the main thread, asserts
+  the returned port names match.
+
+**Next (Phase G2: real cross-process bootstrap server)** &mdash;
+upgrade the wire encoding to complex messages with
+`mach_msg_port_descriptor_t` so port rights survive the cross-task
+hop, ship a standalone daemon binary, decide on the
+`bootstrap_port` inheritance story (likely a kernel-side global
+that any task's `task_get_special_port(TASK_BOOTSTRAP_PORT)` falls
+back to when the per-task slot is null), and write
+`test_bootstrap_remote` to validate the daemon end-to-end. After
+that:
+
+- **Fork ravynOS's `lib/libxpc/`** into this repo, build it against
+  our libsystem_kernel + libdispatch + bootstrap server. Smoke
+  marker: `LIBXPC-OK`.
 
 The high-level `dispatch_mach_t` channel API in libdispatch's
 `src/mach.c` (~3,250 LOC, gated on `HAVE_MACH`) is *not* on the
