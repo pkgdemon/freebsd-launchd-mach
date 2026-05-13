@@ -369,7 +369,18 @@ mach_msg_receive(
 	self->ith_scatter_list_size = slist_size;
 	self->ith_object = object;
 	assert(object->io_references > 0);
-	mr = ipc_mqueue_receive(bits, option & MACH_RCV_TIMEOUT, rcv_size,
+	/*
+	 * Pass the full option through. The previous masking to just
+	 * MACH_RCV_TIMEOUT stripped MACH_RCV_LARGE before it reached
+	 * ipc_mqueue_post_on_thread, so the "leave the kmsg on the queue
+	 * on TOO_LARGE+LARGE" branch (ipc_mqueue.c:632-639) never fired;
+	 * the kernel fell through to ipc_kmsg_rmqueue_first and consumed
+	 * the message even when the caller had explicitly asked it not
+	 * to. libdispatch's MACH_RECV polling-thread peek loop depends on
+	 * the LARGE behavior — without this the message gets dequeued on
+	 * the first peek and the user's handler sees TIMED_OUT.
+	 */
+	mr = ipc_mqueue_receive(bits, option, rcv_size,
 							timeout, &kmsg, &seqno, self);
 	/* mqueue is unlocked */
 	ipc_object_release(object);
