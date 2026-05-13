@@ -251,27 +251,40 @@ launchd+configd+notifyd+asl port wants 20-30 more. FreeBSD&rsquo;s
 Audit plan documenting the trade space:
 [freebsd-mach-kmod-syscall-slots-spike](https://pkgdemon.github.io/freebsd-mach-kmod-syscall-slots-spike.html).
 
-**Next (Phase G2: complete the bootstrap server)** &mdash; two
-remaining steps:
+**Phase G2c + G2d (standalone daemon + cross-process)** &mdash;
+*done.* `/usr/local/sbin/bootstrap_server` is a real binary: at
+startup it allocates a service port, inserts a `MAKE_SEND` right,
+publishes via `host_set_special_port(HOST_BOOTSTRAP_PORT)`, and
+enters `bootstrap_server_run`. `run.sh` backgrounds the daemon
+before running `test_bootstrap_remote` (a fresh process whose
+per-task `itk_bootstrap` is null, so `task_get_bootstrap_port`
+falls back to the host slot the daemon populated). The test
+exercises `bootstrap_check_in` then `bootstrap_look_up` of the
+same service name across IPC spaces &mdash; the cross-task
+port-right transfer Phase G2a's complex-message wire encoding
+made possible. Asserts non-`MACH_PORT_NULL` returns and that
+both calls yield the same port name in the receiver's IPC space.
+Smoke marker: `BOOTSTRAP-REMOTE-OK`. The daemon is *not* wired
+into `rc.local` &mdash; its real home is a launchd-managed job
+once launchd is PID 1 (Phase J-ish). Until then it's ephemeral,
+started by the smoke harness and SIGKILL'd after.
 
-1. **G2c: standalone `bootstrap_server` daemon binary.** Allocates
-   its service port, calls `host_set_special_port`, enters the
-   existing `bootstrap_server_run` loop. Installed but *not* wired
-   into `rc.local`: the bootstrap server's real home is as a
-   launchd-managed job, which only happens once launchd is PID 1
-   (a much later phase). Until then, the daemon is ephemeral &mdash;
-   started by the test harness, killed after.
-2. **G2d: cross-process test.** `run.sh` launches the daemon in
-   the background, runs `test_bootstrap_remote` (a `fork`-based
-   client that calls `task_get_bootstrap_port` and exercises
-   check_in / look_up against the running daemon), kills the
-   daemon afterward. New smoke marker: `BOOTSTRAP-REMOTE-OK`.
+**Next (Phase H: libxpc port)** &mdash; all prerequisites in place:
 
-After Phase G2:
+| Capability | Phase | Marker |
+|---|---|---|
+| Mach IPC (`mach_msg` send/recv) | C3 | `LIBSYSTEM-KERNEL-OK` |
+| `DISPATCH_SOURCE_TYPE_MACH_RECV` | E | `LIBDISPATCH-MACH-OK` |
+| Port management (`mach_port_*`) | F | `MACH_PORT_OK` |
+| `task_*_special_port` | G prereq | `TASK-SPECIAL-PORT-OK` |
+| `host_set_special_port` + fallback | G2b | `HOST-BOOTSTRAP-OK` |
+| `bootstrap_check_in` / `bootstrap_look_up` + daemon | G1/G2c/G2d | `BOOTSTRAP-OK`, `BOOTSTRAP-REMOTE-OK` |
 
-- **Fork ravynOS's `lib/libxpc/`** into this repo, build it against
-  our libsystem_kernel + libdispatch + bootstrap server. Smoke
-  marker: `LIBXPC-OK`.
+Fork ravynOS's `lib/libxpc/` into this repo, build it against our
+libsystem_kernel + libdispatch + libbootstrap. ravynOS's libxpc
+uses exactly the Mach surface we've wired (verified via grep in
+the Phase D notes); no `dispatch_mach_t` channel API needed. Smoke
+marker: `LIBXPC-OK`.
 
 The high-level `dispatch_mach_t` channel API in libdispatch's
 `src/mach.c` (~3,250 LOC, gated on `HAVE_MACH`) is *not* on the
