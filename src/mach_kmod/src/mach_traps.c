@@ -333,6 +333,31 @@ mux_host_set_special_port(struct thread *td,
 	return (0);
 }
 
+/*
+ * task_set_special_port migrated from its previous dedicated slot
+ * into the multiplexer to free the slot for the multiplexer itself.
+ */
+static int
+mux_task_set_special_port(struct thread *td,
+    mach_port_name_t target_task __unused, int which,
+    mach_port_name_t portname)
+{
+	task_t task = current_task();
+	ipc_port_t port = IP_NULL;
+	kern_return_t kr;
+
+	if (portname != 0) {
+		kr = ipc_object_copyin(task->itk_space, portname,
+		    MACH_MSG_TYPE_COPY_SEND, (ipc_object_t *)&port);
+		if (kr != KERN_SUCCESS) {
+			td->td_retval[0] = kr;
+			return (0);
+		}
+	}
+	td->td_retval[0] = task_set_special_port(task, which, port);
+	return (0);
+}
+
 int
 sys_mach_trap_mux_trap(struct thread *td,
     struct mach_trap_mux_trap_args *uap)
@@ -341,6 +366,11 @@ sys_mach_trap_mux_trap(struct thread *td,
 	switch (uap->op) {
 	case 1:		/* MACH_TRAP_OP_HOST_SET_SPECIAL_PORT */
 		return (mux_host_set_special_port(td,
+		    (mach_port_name_t)uap->a1,
+		    (int)uap->a2,
+		    (mach_port_name_t)uap->a3));
+	case 2:		/* MACH_TRAP_OP_TASK_SET_SPECIAL_PORT */
+		return (mux_task_set_special_port(td,
 		    (mach_port_name_t)uap->a1,
 		    (int)uap->a2,
 		    (mach_port_name_t)uap->a3));

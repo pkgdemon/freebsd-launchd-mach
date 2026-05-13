@@ -229,17 +229,27 @@ task_get_special_port(mach_port_name_t task, int which,
 	return ((kern_return_t)syscall(num, task, which, port));
 }
 
+/*
+ * task_set_special_port routes through the Mach trap multiplexer (op=2).
+ * Migrated off its previously-dedicated FreeBSD syscall slot to free
+ * that slot for the multiplexer itself (FreeBSD's lkmnosys range is
+ * exactly 10 entries and we use all of them on foundational Mach
+ * traps; the multiplexer hosts unbounded ops in one slot).
+ */
 kern_return_t
 task_set_special_port(mach_port_name_t task, int which, mach_port_t port)
 {
 	static int num = NO_SYSCALL;
 
 	if (num == NO_SYSCALL) {
-		num = resolve_syscall("task_set_special_port");
+		num = resolve_syscall("mach_trap_mux");
 		if (num == NO_SYSCALL)
 			return (KERN_RESOURCE_SHORTAGE);
 	}
-	return ((kern_return_t)syscall(num, task, which, port));
+	return ((kern_return_t)syscall(num,
+	    MACH_TRAP_OP_TASK_SET_SPECIAL_PORT,
+	    (uint64_t)task, (uint64_t)which, (uint64_t)port,
+	    (uint64_t)0, (uint64_t)0));
 }
 
 /*

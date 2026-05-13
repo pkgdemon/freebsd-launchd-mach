@@ -40,17 +40,26 @@ extern "C" {
  *   0 — reserved sentinel ("invalid op"); kernel rejects with
  *       KERN_INVALID_ARGUMENT.
  *   1 — host_set_special_port(host, which, port)
+ *   2 — task_set_special_port(task, which, port)
  *
- * New ops append at the end. The Mach traps currently wired in
- * dedicated FreeBSD slots (mach_reply_port, task_self_trap, ...,
- * mach_msg_trap) do NOT have op numbers — they keep their dedicated
- * slots for stability and (in the case of mach_msg_trap) ABI
- * reasons.
+ * task_set_special_port migrated into the multiplexer to free its
+ * previous dedicated FreeBSD syscall slot for the multiplexer
+ * itself (which now occupies that slot — FreeBSD's lkmnosys range
+ * is exactly 10 entries at 210-219, all used by foundational
+ * Mach traps).
+ *
+ * New ops append at the end. The traps still in dedicated FreeBSD
+ * slots (mach_reply_port, task_self_trap, thread_self_trap,
+ * host_self_trap, mach_msg_trap, mach_port_allocate, _deallocate,
+ * _insert_right, task_get_special_port) do NOT have op numbers —
+ * they keep their dedicated slots for stability and (mach_msg_trap)
+ * ABI reasons.
  */
 #define MACH_TRAP_OP_INVALID			0
 #define MACH_TRAP_OP_HOST_SET_SPECIAL_PORT	1
+#define MACH_TRAP_OP_TASK_SET_SPECIAL_PORT	2
 
-#define MACH_TRAP_OP_MAX			1
+#define MACH_TRAP_OP_MAX			2
 
 #ifdef __cplusplus
 }

@@ -252,19 +252,6 @@ sys_task_get_special_port_trap_guarded(struct thread *td,
 	return (sys_task_get_special_port_trap(td, uap));
 }
 
-static int
-sys_task_set_special_port_trap_guarded(struct thread *td,
-    struct task_set_special_port_trap_args *uap)
-{
-	if (td->td_proc->p_machdata == NULL)
-		mach_task_init_lazy(td->td_proc);
-	if (td->td_proc->p_machdata == NULL) {
-		td->td_retval[0] = 4;	/* KERN_INVALID_ARGUMENT */
-		return (0);
-	}
-	return (sys_task_set_special_port_trap(td, uap));
-}
-
 /*
  * Mach trap multiplexer. Needs Mach task state for the same reason
  * the individual port traps do — the inlined handlers reach
@@ -369,20 +356,20 @@ static struct sysent task_get_special_port_sysent = {
 	.sy_flags	= 0,
 };
 
-static struct sysent task_set_special_port_sysent = {
-	.sy_narg	= 3,
-	.sy_call	= (sy_call_t *)sys_task_set_special_port_trap_guarded,
-	.sy_auevent	= AUE_NULL,
-	.sy_flags	= 0,
-};
-
 /*
  * Multiplexer sysent. 6 args: op + 5 args. Op-number namespace in
- * <mach/mach_traps_mux.h>. Registered at FreeBSD's RESERVED slot 91
- * (currently unused by base; the FreeBSD project's own comment
- * earmarks RESERVED slots for vendor / local use).
+ * <mach/mach_traps_mux.h>.
+ *
+ * Registered dynamically via kern_syscall_register's auto-allocate
+ * path — claims the last remaining lkmnosys slot in 210-219.
+ * RESERVED slots elsewhere in the table use sysent[N].sy_call =
+ * nosys, which kern_syscall_register rejects (it only accepts
+ * lkmnosys or lkmressys, see freebsd-src/sys/kern/kern_syscalls.c:142).
+ * NOSTD/lkmressys slots are earmarked for specific FreeBSD modules
+ * (nfssvc / semsys / msgsys / shmsys / nlm_syscall) and hostile to
+ * claim. So we live within the 10 lkmnosys slots; the multiplexer
+ * uses one of them, and unbounded Mach traps live inside it as ops.
  */
-#define MACH_TRAP_MUX_SLOT		91
 static struct sysent mach_trap_mux_sysent = {
 	.sy_narg	= 6,
 	.sy_call	= (sy_call_t *)sys_mach_trap_mux_trap_guarded,
@@ -416,9 +403,6 @@ static struct sysent _kernelrpc_mach_port_insert_right_old_sysent;
 
 static int task_get_special_port_offset = NO_SYSCALL;
 static struct sysent task_get_special_port_old_sysent;
-
-static int task_set_special_port_offset = NO_SYSCALL;
-static struct sysent task_set_special_port_old_sysent;
 
 static int mach_trap_mux_offset = NO_SYSCALL;
 static struct sysent mach_trap_mux_old_sysent;
@@ -480,11 +464,6 @@ SYSCTL_INT(_mach_syscall, OID_AUTO, mach_port_insert_right, CTLFLAG_RD,
 SYSCTL_INT(_mach_syscall, OID_AUTO, task_get_special_port, CTLFLAG_RD,
     &task_get_special_port_offset, 0,
     "Dynamically-allocated FreeBSD syscall number for task_get_special_port "
-    "(3-arg syscall; -1 if registration failed)");
-
-SYSCTL_INT(_mach_syscall, OID_AUTO, task_set_special_port, CTLFLAG_RD,
-    &task_set_special_port_offset, 0,
-    "Dynamically-allocated FreeBSD syscall number for task_set_special_port "
     "(3-arg syscall; -1 if registration failed)");
 
 SYSCTL_INT(_mach_syscall, OID_AUTO, mach_trap_mux, CTLFLAG_RD,
@@ -579,10 +558,12 @@ mach_syscall_wire_register(void *arg __unused)
 	    &_kernelrpc_mach_port_insert_right_old_sysent);
 	wire_one("task_get_special_port", &task_get_special_port_offset,
 	    &task_get_special_port_sysent, &task_get_special_port_old_sysent);
-	wire_one("task_set_special_port", &task_set_special_port_offset,
-	    &task_set_special_port_sysent, &task_set_special_port_old_sysent);
-	wire_one_at("mach_trap_mux", MACH_TRAP_MUX_SLOT,
-	    &mach_trap_mux_offset,
+	/*
+	 * task_set_special_port migrated into the multiplexer (op=2). Its
+	 * dedicated slot is freed for the multiplexer itself, which lands
+	 * in the last available lkmnosys slot (219 on FreeBSD-15-amd64).
+	 */
+	wire_one("mach_trap_mux", &mach_trap_mux_offset,
 	    &mach_trap_mux_sysent, &mach_trap_mux_old_sysent);
 }
 
@@ -593,9 +574,6 @@ mach_syscall_wire_deregister(void *arg __unused)
 	unwire_one("mach_trap_mux",
 	    &mach_trap_mux_offset,
 	    &mach_trap_mux_old_sysent);
-	unwire_one("task_set_special_port",
-	    &task_set_special_port_offset,
-	    &task_set_special_port_old_sysent);
 	unwire_one("task_get_special_port",
 	    &task_get_special_port_offset,
 	    &task_get_special_port_old_sysent);
