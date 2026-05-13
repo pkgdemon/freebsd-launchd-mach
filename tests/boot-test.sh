@@ -68,6 +68,41 @@ eval spawn qemu-system-x86_64 \
     -display none -serial stdio \
     -no-reboot
 
+# Stage 0: at the loader's autoboot countdown, drop into the OK prompt
+# and enable the serial console for the kernel. /boot/loader.conf no
+# longer sets console/boot_serial/etc. (clean console on real laptops
+# and VBox where the floating comconsole UART line was producing junk
+# chars at the loader prompt). Under qemu+OVMF -display none the
+# loader's default `efi` console routes to serial so we can interact
+# from here.
+expect {
+    timeout {
+        puts "\nFAIL: didn't see loader autoboot prompt within 60s"
+        exit 1
+    }
+    -re "Hit \\\[Enter\\\]" { send " " }
+    "Booting"                { send " " }
+    "FreeBSD/amd64 EFI"      { send " " }
+}
+
+expect {
+    timeout {
+        puts "\nFAIL: didn't reach loader OK prompt within 30s"
+        exit 1
+    }
+    "OK " { puts "\n==> at loader prompt; setting serial console vars" }
+}
+
+send "set console=\"comconsole vidconsole\"\r"
+expect "OK "
+send "set boot_serial=YES\r"
+expect "OK "
+send "set comconsole_speed=115200\r"
+expect "OK "
+send "set boot_multicons=YES\r"
+expect "OK "
+send "boot\r"
+
 # Stage 1: wait for the Phase B mach.ko smoke marker emitted by
 # /etc/rc.local. By the time this fires, the boot pipeline has worked:
 # loader preloaded mach.ko -> kernel up -> /init.sh as PID 1 -> unionfs
