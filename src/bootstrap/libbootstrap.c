@@ -9,6 +9,7 @@
  * cross-process via complex-message port descriptors + a real daemon.
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -19,6 +20,20 @@
 #include <servers/bootstrap.h>
 
 #include "bootstrap_protocol.h"
+
+/*
+ * BOOTSTRAP_DEBUG: when set non-zero, libbootstrap traces each
+ * mach_msg send/receive on the protocol path so failures can be
+ * bisected. Compiled-in for now (Phase G1 single-task validation
+ * needs the visibility); strip once the cross-process / daemon
+ * path is stable.
+ */
+#define	BOOTSTRAP_DEBUG	1
+#if BOOTSTRAP_DEBUG
+#define	bs_dbg(...)	do { fprintf(stderr, "bs: " __VA_ARGS__); fflush(stderr); } while (0)
+#else
+#define	bs_dbg(...)	((void)0)
+#endif
 
 /*
  * Per-call buffer big enough for header + trailer slack the kernel
@@ -76,6 +91,9 @@ bootstrap_call(mach_port_t bp, uint32_t msg_id, const char *name,
 	}
 
 	memset(&reply, 0, sizeof(reply));
+	bs_dbg("client: send id=0x%x bp=0x%x reply=0x%x name=%s\n",
+	    (unsigned)msg_id, (unsigned)bp, (unsigned)reply_port,
+	    name ? name : "(null)");
 	mr = mach_msg((mach_msg_header_t *)&req,
 	    MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT |
 	        MACH_RCV_TIMEOUT,
@@ -84,6 +102,7 @@ bootstrap_call(mach_port_t bp, uint32_t msg_id, const char *name,
 	    reply_port,
 	    5000,	/* 5s — generous, server loop should reply much faster */
 	    MACH_PORT_NULL);
+	bs_dbg("client: mach_msg returned 0x%x\n", (unsigned)mr);
 	if (mr != MACH_MSG_SUCCESS)
 		return ((kern_return_t)mr);
 
@@ -199,6 +218,8 @@ bootstrap_server_run(mach_port_t service_port, volatile int *stop)
 	mach_port_name_t out_port;
 	mach_msg_id_t reply_id;
 
+	bs_dbg("server: enter loop, service_port=0x%x\n",
+	    (unsigned)service_port);
 	while (stop == NULL || !*stop) {
 		memset(&req, 0, sizeof(req));
 		mr = mach_msg((mach_msg_header_t *)&req.msg,
@@ -206,8 +227,16 @@ bootstrap_server_run(mach_port_t service_port, volatile int *stop)
 		    0, sizeof(req), service_port, 500, MACH_PORT_NULL);
 		if (mr == MACH_RCV_TIMED_OUT)
 			continue;
-		if (mr != MACH_MSG_SUCCESS)
+		bs_dbg("server: recv id=0x%x remote=0x%x local=0x%x name=%s\n",
+		    (unsigned)req.msg.header.msgh_id,
+		    (unsigned)req.msg.header.msgh_remote_port,
+		    (unsigned)req.msg.header.msgh_local_port,
+		    req.msg.service_name);
+		if (mr != MACH_MSG_SUCCESS) {
+			bs_dbg("server: mach_msg(RCV) failed 0x%x — exit loop\n",
+			    (unsigned)mr);
 			return;
+		}
 
 		out_port = MACH_PORT_NULL;
 		switch (req.msg.header.msgh_id) {
@@ -245,8 +274,11 @@ bootstrap_server_run(mach_port_t service_port, volatile int *stop)
 		reply.result = kr;
 		reply.port   = out_port;
 
-		(void)mach_msg((mach_msg_header_t *)&reply,
+		mr = mach_msg((mach_msg_header_t *)&reply,
 		    MACH_SEND_MSG | MACH_SEND_TIMEOUT,
 		    sizeof(reply), 0, MACH_PORT_NULL, 100, MACH_PORT_NULL);
+		bs_dbg("server: reply id=0x%x port=0x%x result=0x%x send_rc=0x%x\n",
+		    (unsigned)reply_id, (unsigned)out_port, (unsigned)kr,
+		    (unsigned)mr);
 	}
 }
