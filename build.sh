@@ -302,10 +302,12 @@ ninja install
 CHROOT_DISPATCH
 
 echo "==> creating libsystem_dispatch / libsystem_blocks symlinks"
-ln -sf libdispatch.so       "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so"
-ln -sf libdispatch.so.0     "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so.0"
-ln -sf libBlocksRuntime.so   "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so"
-ln -sf libBlocksRuntime.so.0 "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so.0" 2>/dev/null || true
+# libdispatch's CMakeLists doesn't set SOVERSION — output is just
+# libdispatch.so (unversioned), no .so.0. DT_SONAME is empty, so
+# consumers' DT_NEEDED becomes the filename (libdispatch.so).
+# Symlink both Apple-canonical names to the unversioned file.
+ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so"
+ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so"
 
 # Re-prime ldconfig hints now that libdispatch + BlocksRuntime are
 # installed at /usr/lib/libsystem.
@@ -331,12 +333,16 @@ cc -I"$WORK/rootfs/usr/include" \
 #
 echo "==> verifying libdispatch install"
 ls -la "$WORK/rootfs/usr/lib/libsystem/" || true
-test -f "$WORK/rootfs/usr/lib/libsystem/libdispatch.so.0" \
-    || { echo "FAIL: libdispatch.so.0 missing"; exit 1; }
-test -L "$WORK/rootfs/usr/lib/libsystem/libdispatch.so" \
-    || { echo "FAIL: libdispatch.so symlink missing"; exit 1; }
-test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so.0" \
-    || { echo "FAIL: libsystem_dispatch.so.0 symlink missing"; exit 1; }
+# libdispatch installs unversioned: libdispatch.so is the actual file
+# (no .so.0). Same for libBlocksRuntime.
+test -f "$WORK/rootfs/usr/lib/libsystem/libdispatch.so" \
+    || { echo "FAIL: libdispatch.so (the library binary) missing"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so" \
+    || { echo "FAIL: libsystem_dispatch.so symlink missing"; exit 1; }
+test -f "$WORK/rootfs/usr/lib/libsystem/libBlocksRuntime.so" \
+    || { echo "FAIL: libBlocksRuntime.so missing"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so" \
+    || { echo "FAIL: libsystem_blocks.so symlink missing"; exit 1; }
 test -f "$WORK/rootfs/usr/include/Block.h" \
     || { echo "FAIL: /usr/include/Block.h missing (libdispatch should ship it)"; exit 1; }
 test -f "$WORK/rootfs/usr/include/dispatch/dispatch.h" \
@@ -344,7 +350,7 @@ test -f "$WORK/rootfs/usr/include/dispatch/dispatch.h" \
 chroot "$WORK/rootfs" ldconfig -r | grep -q libdispatch \
     || { echo "FAIL: ldconfig hints missing libdispatch"; exit 1; }
 chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libdispatch \
-    | grep -q "libdispatch.so.0 => /usr/lib/libsystem/" \
+    | grep -q "libdispatch.so => /usr/lib/libsystem/" \
     || { echo "FAIL: ldd doesn't resolve test_libdispatch to /usr/lib/libsystem/"; exit 1; }
 echo "==> libdispatch install verified"
 
