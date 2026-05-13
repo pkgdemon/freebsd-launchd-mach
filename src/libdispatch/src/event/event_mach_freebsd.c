@@ -77,7 +77,13 @@ extern mach_msg_return_t mach_msg(void *msg, mach_msg_option_t option,
     mach_port_t rcv_name, mach_msg_timeout_t timeout,
     mach_port_t notify);
 
-#define DISPATCH_MACH_RECV_POLL_MS	100
+/*
+ * Poll period in microseconds. The polling thread sleeps for this long
+ * between calls to mach_msg(timeout=0). We deliberately do NOT use
+ * mach_msg's own timeout to block in-kernel — see the comment in
+ * _dispatch_mach_recv_poll for why.
+ */
+#define DISPATCH_MACH_RECV_POLL_US	100000  /* 100 ms */
 
 #define DISPATCH_MACH_RECV_WREF_SPIN_LIMIT  5000  /* * 1ms = 5s */
 
@@ -141,10 +147,40 @@ _dispatch_mach_recv_poll(void *arg)
 
 	while (!dispatch_source_testcancel(ds)) {
 		/*
+		 * Sleep BEFORE mach_msg, with timeout=0 inside mach_msg.
+		 *
+		 * Why not let mach_msg block via its own timeout: when the
+		 * kernel's ipc_mqueue_deliver sees an already-blocked receiver,
+		 * it short-circuits via ipc_mqueue_run — handing the kmsg
+		 * directly to that thread and removing it from the queue,
+		 * *bypassing* the MACH_RCV_LARGE size-check path. The blocked
+		 * thread then wakes inside ipc_mqueue_finish_receive, which
+		 * does check the size, sees rcv_size=0 < real size, returns
+		 * MACH_RCV_TOO_LARGE — but at that point the kmsg has been
+		 * dequeued and is in limbo (not on the queue, not delivered).
+		 * The handler's subsequent mach_msg(MACH_RCV_MSG) sees an
+		 * empty queue → MACH_RCV_TIMED_OUT, and the test fails.
+		 *
+		 * Workaround: never enter the blocked-receiver state in
+		 * mach_msg. Use timeout=0 so mach_msg either returns
+		 * immediately with TOO_LARGE (message queued) or TIMED_OUT
+		 * (queue empty); the queue-based code path handles
+		 * MACH_RCV_LARGE correctly (ipc_mqueue_post_on_thread leaves
+		 * the kmsg on the queue). Sleep in userland via usleep
+		 * between polls.
+		 *
+		 * Latency cost: up to 100ms between a message arriving and
+		 * the handler being woken. Fine for typical XPC/launchd use;
+		 * we can replace this with kqueue or a kernel-side wake once
+		 * the deeper ipc_mqueue_finish_receive issue is patched.
+		 */
+		usleep(DISPATCH_MACH_RECV_POLL_US);
+
+		/*
 		 * Receive buffer: with rcv_size=0 the kernel returns
-		 * MACH_RCV_TOO_LARGE without touching this buffer (just
-		 * reports the message stayed on the queue). A small zeroed
-		 * stack array is enough to give mach_msg a valid pointer.
+		 * MACH_RCV_TOO_LARGE without touching this buffer. A small
+		 * zeroed stack array is enough to give mach_msg a valid
+		 * pointer.
 		 */
 		uint8_t hdrbuf[32];
 		memset(hdrbuf, 0, sizeof(hdrbuf));
@@ -154,7 +190,7 @@ _dispatch_mach_recv_poll(void *arg)
 		    0,    /* send_size */
 		    0,    /* rcv_size: forces TOO_LARGE without consume */
 		    port,
-		    DISPATCH_MACH_RECV_POLL_MS,
+		    0,    /* timeout=0: poll, never block in kernel */
 		    MACH_PORT_NULL);
 
 		switch (mr) {
