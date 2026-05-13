@@ -193,15 +193,44 @@ Hand-rolled message-ID dispatch over Mach IPC (no MIG):
   `bootstrap_look_up` for the same name from the main thread, asserts
   the returned port names match.
 
+**Phase G2a (complex Mach messages on the bootstrap wire)** &mdash;
+*done.* Reply upgraded to a complex message
+(`MACH_MSGH_BITS_COMPLEX` + `mach_msg_body_t` +
+`mach_msg_port_descriptor_t` + result) so the kernel translates
+the port reference between sender and receiver IPC spaces &mdash;
+prerequisite for cross-task port-right transfer. Bug hunt during
+validation exposed and fixed a Phase G1 false positive where the
+combined `MACH_SEND_MSG | MACH_RCV_MSG` form reused the buffer for
+both directions: the kernel wrote the reply into the same memory
+that held the request, and the test was vacuously comparing
+`0 == 0`. Now uses split `mach_msg(SEND)` + `mach_msg(RCV)` and
+asserts non-`MACH_PORT_NULL` ports in the test.
+
 **Next (Phase G2: real cross-process bootstrap server)** &mdash;
-upgrade the wire encoding to complex messages with
-`mach_msg_port_descriptor_t` so port rights survive the cross-task
-hop, ship a standalone daemon binary, decide on the
-`bootstrap_port` inheritance story (likely a kernel-side global
-that any task's `task_get_special_port(TASK_BOOTSTRAP_PORT)` falls
-back to when the per-task slot is null), and write
-`test_bootstrap_remote` to validate the daemon end-to-end. After
-that:
+three remaining steps:
+
+1. **G2b: kernel-side global bootstrap-port fallback.** mach.ko
+   stores a single `ipc_port_t` (the host's bootstrap port). Modify
+   `task_get_special_port(TASK_BOOTSTRAP_PORT)` so when a task's
+   per-task `itk_bootstrap` slot is null, the kernel materializes a
+   send right from the global slot. New `host_set_special_port`
+   syscall lets the bootstrap server register the global port once
+   at startup. This is how every task discovers the daemon's port
+   without needing fork-inheritance or environment variables.
+2. **G2c: standalone `bootstrap_server` daemon binary.** Allocates
+   its service port, calls `host_set_special_port`, enters the
+   existing `bootstrap_server_run` loop. Installed but *not* wired
+   into `rc.local`: the bootstrap server's real home is as a
+   launchd-managed job, which only happens once launchd is PID 1
+   (a much later phase). Until then, the daemon is ephemeral &mdash;
+   started by the test harness, killed after.
+3. **G2d: cross-process test.** `run.sh` launches the daemon in
+   the background, runs `test_bootstrap_remote` (a `fork`-based
+   client that calls `task_get_bootstrap_port` and exercises
+   check_in / look_up against the running daemon), kills the
+   daemon afterward. New smoke marker: `BOOTSTRAP-REMOTE-OK`.
+
+After Phase G2:
 
 - **Fork ravynOS's `lib/libxpc/`** into this repo, build it against
   our libsystem_kernel + libdispatch + bootstrap server. Smoke
