@@ -251,12 +251,24 @@ sys_task_get_special_port_trap(struct thread *td,
 	return (0);
 }
 
+/*
+ * task_set_special_port — sets a per-task special-port slot. When
+ * `which == HOST_BOOTSTRAP_PORT` the routing is redirected to the
+ * host-wide realhost.special[] array instead, since FreeBSD only
+ * reserves ten dynamic syscall slots (210-219) and we've used them
+ * all. The HOST_BOOTSTRAP_PORT case is what the bootstrap server
+ * calls via libsystem_kernel's host_set_special_port() (which is a
+ * thin userland wrapper that re-routes through this syscall). The
+ * which-value namespace doesn't collide: TASK_BOOTSTRAP_PORT is 4,
+ * HOST_BOOTSTRAP_PORT is 13.
+ */
 int
 sys_task_set_special_port_trap(struct thread *td,
     struct task_set_special_port_trap_args *uap)
 {
 	task_t task = current_task();
 	ipc_port_t port = IP_NULL;
+	ipc_port_t old;
 	kern_return_t kr;
 
 	/*
@@ -274,62 +286,24 @@ sys_task_set_special_port_trap(struct thread *td,
 			return (0);
 		}
 	}
+
+	if (uap->which == HOST_BOOTSTRAP_PORT) {
+		host_lock(&realhost);
+		old = realhost.special[HOST_BOOTSTRAP_PORT];
+		realhost.special[HOST_BOOTSTRAP_PORT] = port;
+		host_unlock(&realhost);
+		if (IP_VALID(old))
+			ipc_port_release_send(old);
+		td->td_retval[0] = KERN_SUCCESS;
+		return (0);
+	}
+
 	/*
 	 * task_set_special_port stores `port` directly in the task's
 	 * itk_<slot> field and releases whatever was there before. It
 	 * takes ownership of the send right we just copied in.
 	 */
 	td->td_retval[0] = task_set_special_port(task, uap->which, port);
-	return (0);
-}
-
-/*
- * host_set_special_port — set a slot in realhost.special[]. Used by
- * the freebsd-launchd-mach bootstrap server to publish its receive
- * port as HOST_BOOTSTRAP_PORT host-wide. Only HOST_BOOTSTRAP_PORT is
- * accepted for now; the kernel-provided slots (HOST_PORT,
- * HOST_PRIV_PORT, HOST_IO_MASTER_PORT) and other Apple-defined slots
- * are rejected.
- *
- * The `host` arg is accepted for Apple-canonical API compatibility
- * but unused — we always touch &realhost (the local node's host).
- */
-int
-sys_host_set_special_port_trap(struct thread *td,
-    struct host_set_special_port_trap_args *uap)
-{
-	task_t task = current_task();
-	ipc_port_t port = IP_NULL;
-	ipc_port_t old;
-	kern_return_t kr;
-
-	if (uap->which != HOST_BOOTSTRAP_PORT) {
-		td->td_retval[0] = KERN_INVALID_ARGUMENT;
-		return (0);
-	}
-	if (uap->which < 0 || uap->which > HOST_MAX_SPECIAL_PORT) {
-		td->td_retval[0] = KERN_INVALID_ARGUMENT;
-		return (0);
-	}
-
-	if (uap->port != 0) {
-		kr = ipc_object_copyin(task->itk_space, uap->port,
-		    MACH_MSG_TYPE_COPY_SEND, (ipc_object_t *)&port);
-		if (kr != KERN_SUCCESS) {
-			td->td_retval[0] = kr;
-			return (0);
-		}
-	}
-
-	host_lock(&realhost);
-	old = realhost.special[uap->which];
-	realhost.special[uap->which] = port;
-	host_unlock(&realhost);
-
-	if (IP_VALID(old))
-		ipc_port_release_send(old);
-
-	td->td_retval[0] = KERN_SUCCESS;
 	return (0);
 }
 

@@ -177,19 +177,6 @@ struct task_set_special_port_trap_args {
 	char which_l_[PADL_(int)]; int which; char which_r_[PADR_(int)];
 	char port_l_[PADL_(mach_port_name_t)]; mach_port_name_t port; char port_r_[PADR_(mach_port_name_t)];
 };
-/*
- * host_set_special_port — sets a slot in the global realhost.special[]
- * array. freebsd-launchd-mach uses this for HOST_BOOTSTRAP_PORT so the
- * bootstrap server can publish its receive port host-wide;
- * task_get_special_port(TASK_BOOTSTRAP_PORT) falls back to this when
- * the per-task itk_bootstrap slot is null. Same arg shape as
- * task_set_special_port_trap.
- */
-struct host_set_special_port_trap_args {
-	char host_l_[PADL_(mach_port_name_t)]; mach_port_name_t host; char host_r_[PADR_(mach_port_name_t)];
-	char which_l_[PADL_(int)]; int which; char which_r_[PADR_(int)];
-	char port_l_[PADL_(mach_port_name_t)]; mach_port_name_t port; char port_r_[PADR_(mach_port_name_t)];
-};
 struct mach_msg_trap_args {
 	char msg_l_[PADL_(mach_msg_header_t *)]; mach_msg_header_t * msg; char msg_r_[PADR_(mach_msg_header_t *)];
 	char option_l_[PADL_(mach_msg_option_t)]; mach_msg_option_t option; char option_r_[PADR_(mach_msg_option_t)];

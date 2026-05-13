@@ -243,8 +243,11 @@ task_set_special_port(mach_port_name_t task, int which, mach_port_t port)
 
 /*
  * host_set_special_port — set a slot in the host's special-port
- * array. Currently only HOST_BOOTSTRAP_PORT is accepted (kernel
- * rejects other values with KERN_INVALID_ARGUMENT). The bootstrap
+ * array. Routes through the task_set_special_port syscall: FreeBSD
+ * reserves only 10 dynamic syscall slots (210-219) and we've used
+ * them all, so the kernel-side task_set_special_port_trap handler
+ * routes to realhost.special[] when `which == HOST_BOOTSTRAP_PORT`
+ * (which doesn't collide with any TASK_* value). The bootstrap
  * server calls this once at startup to publish its receive port
  * host-wide; thereafter task_get_special_port(TASK_BOOTSTRAP_PORT)
  * falls back to it when the per-task itk_bootstrap slot is null.
@@ -252,12 +255,6 @@ task_set_special_port(mach_port_name_t task, int which, mach_port_t port)
 kern_return_t
 host_set_special_port(mach_port_name_t host, int which, mach_port_t port)
 {
-	static int num = NO_SYSCALL;
 
-	if (num == NO_SYSCALL) {
-		num = resolve_syscall("host_set_special_port");
-		if (num == NO_SYSCALL)
-			return (KERN_RESOURCE_SHORTAGE);
-	}
-	return ((kern_return_t)syscall(num, host, which, port));
+	return (task_set_special_port(host, which, port));
 }
