@@ -102,7 +102,10 @@ bootstrap_call(mach_port_t bp, uint32_t msg_id, const char *name,
 	    reply_port,
 	    5000,	/* 5s — generous, server loop should reply much faster */
 	    MACH_PORT_NULL);
-	bs_dbg("client: mach_msg returned 0x%x\n", (unsigned)mr);
+	bs_dbg("client: mach_msg returned 0x%x bits=0x%x size=%u id=0x%x\n",
+	    (unsigned)mr, (unsigned)reply.msg.header.msgh_bits,
+	    (unsigned)reply.msg.header.msgh_size,
+	    (unsigned)reply.msg.header.msgh_id);
 	if (mr != MACH_MSG_SUCCESS)
 		return ((kern_return_t)mr);
 
@@ -112,6 +115,12 @@ bootstrap_call(mach_port_t bp, uint32_t msg_id, const char *name,
 	 * malformed replies; on cross-task the kernel will have
 	 * translated descriptor.name into our IPC space.
 	 */
+	bs_dbg("client: body.descriptor_count=%u port.name=0x%x port.disp=%u port.type=%u result=0x%x\n",
+	    (unsigned)reply.msg.body.msgh_descriptor_count,
+	    (unsigned)reply.msg.port.name,
+	    (unsigned)reply.msg.port.disposition,
+	    (unsigned)reply.msg.port.type,
+	    (unsigned)reply.msg.result);
 	if (reply.msg.body.msgh_descriptor_count != 1) {
 		bs_dbg("client: malformed reply, descriptor_count=%u\n",
 		    (unsigned)reply.msg.body.msgh_descriptor_count);
