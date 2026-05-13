@@ -137,43 +137,50 @@ port, 0, q)` returns a live source backed by:
   CI marker, stronger meaning.
 - CI smoke at this checkpoint: still 4/4 markers green on the live ISO.
 
-**Next** &mdash; port libxpc on top of the Phase E foundation. The
-ravynOS-fork libxpc (`lib/libxpc/` in their tree) uses a deliberately
-small Mach surface that maps cleanly onto what we already have:
+**Phase F (port-management syscalls)** &mdash; *done.* Three new
+Mach traps wired into mach.ko + exposed through libsystem_kernel,
+prerequisites for the ravynOS-fork libxpc:
 
-- `DISPATCH_SOURCE_TYPE_MACH_RECV` &mdash; the only libdispatch Mach
-  source type it touches. Done in Phase E.
-- Raw `mach_msg(MACH_SEND_MSG/MACH_RCV_MSG, ...)` via
-  libsystem_kernel. Done in Phase C3.
-- `mach_port_allocate`, `mach_port_insert_right`,
-  `mach_port_deallocate` &mdash; three port-management calls we
-  don't have yet. Wire them as new mach.ko-registered syscalls and
-  expose them through libsystem_kernel (same pattern as the C1
-  `mach_reply_port` family).
-- `bootstrap_check_in` / `bootstrap_look_up` against a
-  `bootstrap_port` global &mdash; needs a bootstrap server (a small
-  daemon that maps service names to mach ports; everything else
-  asks it for service ports at connect time).
+- `mach_port_allocate(task, right, &name)` — allocate a fresh port
+  (RECEIVE / SEND / PORT_SET / DEAD_NAME). Syscall 215 on amd64.
+- `mach_port_deallocate(task, name)` — drop a send / send-once
+  right from the task's namespace. Syscall 216.
+- `mach_port_insert_right(task, name, poly, polyPoly)` — attach a
+  port right onto an existing name (typically MAKE_SEND on a
+  receive-right port; the path libxpc uses for service endpoints).
+  Syscall 217.
+- All three handlers (`sys__kernelrpc_mach_port_*_trap`) and arg
+  structs (`_kernelrpc_mach_port_*_trap_args`) were already
+  imported from ravynOS — just needed the
+  `mach_syscall_wire.c` registration. NULL-guard wrappers lazy-init
+  Mach task state and return `KERN_RESOURCE_SHORTAGE` if init fails.
+- New header `mach/mach_port.h` ships `kern_return_t`,
+  `mach_port_right_t`, `mach_msg_type_name_t`, and the
+  `MACH_PORT_RIGHT_*` / `MACH_MSG_TYPE_*` / `KERN_*` constants
+  libxpc uses.
+- New smoke test `test_mach_port` does a full allocate &rarr;
+  insert_right(MAKE_SEND) &rarr; self-mach_msg(SEND) &rarr;
+  mach_msg(RCV) &rarr; deallocate round-trip. CI marker
+  `MACH-PORT-OK` between `LIBSYSTEM-KERNEL-OK` and `LIBDISPATCH-OK`.
+  5/5 markers green.
 
-So the next-step sequencing is:
+**Next** &mdash; the remaining two steps in the libxpc plan:
 
-1. **Three new port-management syscalls** in mach.ko +
-   libsystem_kernel (`mach_port_allocate` /
-   `mach_port_insert_right` / `mach_port_deallocate`). Small, same
-   shape as the four traps we already wired.
-2. **Bootstrap server** (`bootstrap_check_in` /
-   `bootstrap_look_up`).
-3. **Fork ravynOS's `lib/libxpc/` into this repo**, build it
-   against our libsystem_kernel + libdispatch + the new
-   port-management calls. Smoke marker: `LIBXPC-OK`.
+1. **Bootstrap server** (`bootstrap_check_in` / `bootstrap_look_up`
+   against a `bootstrap_port` global). A small daemon that maps
+   service names to Mach ports; everything else asks it for service
+   ports at connect time.
+2. **Fork ravynOS's `lib/libxpc/` into this repo**, build it
+   against our libsystem_kernel + libdispatch + the bootstrap
+   server. Smoke marker: `LIBXPC-OK`.
 
 The high-level `dispatch_mach_t` channel API in libdispatch's
 `src/mach.c` (~3,250 LOC, gated on `HAVE_MACH`) is *not* on the
 critical path &mdash; ravynOS libxpc deliberately reaches for the
-lower-level primitives instead. The channel API only comes back if
-we later want to support Apple-source consumers that use it directly
-(e.g., specific Apple frameworks); none of our current Phase F-G
-targets do.
+lower-level primitives we now have. The channel API only comes back
+if we later want to support Apple-source consumers that use it
+directly (e.g., specific Apple frameworks); none of our current
+Phase F-G targets do.
 
 Plan docs:
 
