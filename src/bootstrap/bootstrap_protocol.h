@@ -41,9 +41,18 @@
 #define BOOTSTRAP_MAX_NAME_LEN		128
 
 /*
- * Wire layout. mach_msg_header_t is 24 bytes; structures below pack
+ * Wire layout. mach_msg_header_t is 24 bytes; descriptor types pack
  * with #pragma pack(4) to match kernel-side mach_msg_header_t
  * alignment expectations.
+ *
+ * Reply is a COMPLEX message (msgh_bits has MACH_MSGH_BITS_COMPLEX
+ * set) carrying the service port as a port descriptor — that's how
+ * Mach delivers port rights across IPC spaces. The descriptor's
+ * .name field is in the SENDER's view on the wire; the kernel
+ * translates it to a name valid in the RECEIVER's IPC space on
+ * delivery. For same-task (Phase G1 carry-over) the names happen
+ * to match; cross-task they don't, and the receiver reads
+ * descriptor.name to learn the local name.
  */
 #pragma pack(4)
 
@@ -53,9 +62,10 @@ struct bootstrap_request_msg {
 };
 
 struct bootstrap_reply_msg {
-	mach_msg_header_t	header;
-	kern_return_t		result;
-	mach_port_name_t	port;
+	mach_msg_header_t		header;
+	mach_msg_body_t			body;		/* descriptor_count = 1 */
+	mach_msg_port_descriptor_t	port;		/* service port */
+	kern_return_t			result;
 };
 
 #pragma pack()

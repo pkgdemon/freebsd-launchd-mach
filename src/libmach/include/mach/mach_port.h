@@ -24,7 +24,9 @@ extern "C" {
 
 typedef int kern_return_t;
 typedef unsigned int mach_port_right_t;
-typedef unsigned char mach_msg_type_name_t;
+/* mach_msg_type_name_t is now declared in <mach/message.h> so that
+ * <mach/message.h> can use it standalone (mach_msg_port_descriptor_t
+ * needs it) without pulling in mach_port.h and creating a cycle. */
 
 /* Standard kern_return_t codes we care about; full set in
  * <sys/mach/kern_return.h> on the kernel side. */

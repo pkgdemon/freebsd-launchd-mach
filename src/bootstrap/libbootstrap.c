@@ -106,8 +106,19 @@ bootstrap_call(mach_port_t bp, uint32_t msg_id, const char *name,
 	if (mr != MACH_MSG_SUCCESS)
 		return ((kern_return_t)mr);
 
+	/*
+	 * Reply is a complex message: header + body + port descriptor +
+	 * result. Sanity-check the body's descriptor_count to catch
+	 * malformed replies; on cross-task the kernel will have
+	 * translated descriptor.name into our IPC space.
+	 */
+	if (reply.msg.body.msgh_descriptor_count != 1) {
+		bs_dbg("client: malformed reply, descriptor_count=%u\n",
+		    (unsigned)reply.msg.body.msgh_descriptor_count);
+		return (KERN_FAILURE);
+	}
 	if (out_port)
-		*out_port = reply.msg.port;
+		*out_port = reply.msg.port.name;
 	return (reply.msg.result);
 }
 
@@ -269,15 +280,21 @@ bootstrap_server_run(mach_port_t service_port, volatile int *stop)
 		 * port doesn't have a send-once right.
 		 *
 		 * MOVE_SEND_ONCE consumes the right exactly once on send.
+		 * MACH_MSGH_BITS_COMPLEX signals the body has a descriptor
+		 * the kernel needs to translate.
 		 */
 		reply.header.msgh_bits =
-		    MACH_MSGH_BITS(MACH_MSG_TYPE_MOVE_SEND_ONCE, 0);
+		    MACH_MSGH_BITS(MACH_MSG_TYPE_MOVE_SEND_ONCE, 0) |
+		    MACH_MSGH_BITS_COMPLEX;
 		reply.header.msgh_size = sizeof(reply);
 		reply.header.msgh_remote_port = req.msg.header.msgh_remote_port;
 		reply.header.msgh_local_port  = MACH_PORT_NULL;
 		reply.header.msgh_id          = reply_id;
+		reply.body.msgh_descriptor_count = 1;
+		reply.port.name        = out_port;
+		reply.port.disposition = MACH_MSG_TYPE_MAKE_SEND;
+		reply.port.type        = MACH_MSG_PORT_DESCRIPTOR;
 		reply.result = kr;
-		reply.port   = out_port;
 
 		mr = mach_msg((mach_msg_header_t *)&reply,
 		    MACH_SEND_MSG | MACH_SEND_TIMEOUT,

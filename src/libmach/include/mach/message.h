@@ -22,6 +22,7 @@ typedef unsigned int mach_msg_option_t;
 typedef unsigned int mach_msg_timeout_t;
 typedef int          mach_msg_return_t;
 typedef mach_port_name_t mach_port_t;
+typedef unsigned char mach_msg_type_name_t;	/* port-right disposition */
 
 typedef struct {
 	mach_msg_bits_t   msgh_bits;
@@ -60,6 +61,59 @@ typedef struct {
  */
 #define MACH_MSGH_BITS(remote, local) \
 	((remote) | ((local) << 8))
+
+/*
+ * MACH_MSGH_BITS_COMPLEX — set on msgh_bits to signal that the message
+ * body has descriptors (port references / OOL memory) after the header.
+ * The kernel translates port descriptors between sender / receiver IPC
+ * spaces on this flag.
+ */
+#define MACH_MSGH_BITS_COMPLEX		0x80000000U
+
+/*
+ * Descriptor types (msgh_descriptor->type). PORT_DESCRIPTOR carries a
+ * port reference; OOL_* carry out-of-line memory (not used yet).
+ */
+typedef unsigned char mach_msg_descriptor_type_t;
+#define MACH_MSG_PORT_DESCRIPTOR		0
+#define MACH_MSG_OOL_DESCRIPTOR			1
+#define MACH_MSG_OOL_PORTS_DESCRIPTOR		2
+#define MACH_MSG_OOL_VOLATILE_DESCRIPTOR	3
+
+/*
+ * Complex-message layout: header + body + descriptors + payload.
+ *
+ *   - mach_msg_body_t holds descriptor_count.
+ *   - Each descriptor (mach_msg_port_descriptor_t or one of the OOL
+ *     variants) follows immediately.
+ *   - Payload (user-defined fields) follows the descriptor array.
+ *
+ * #pragma pack(4) on the descriptor types matches the kernel-side
+ * layout in <sys/mach/message.h>; without it 64-bit alignment would
+ * insert a 4-byte gap after `name` and break wire compatibility.
+ *
+ * Userland (non-_KERNEL) mach_msg_port_descriptor_t = 12 bytes:
+ *   mach_port_t       name        (4)
+ *   mach_msg_size_t   pad1        (4)
+ *   uint16_t          pad2        (2)
+ *   uint8_t           disposition (1)  -- MACH_MSG_TYPE_*
+ *   uint8_t           type        (1)  -- MACH_MSG_PORT_DESCRIPTOR
+ */
+#pragma pack(4)
+
+typedef struct {
+	mach_msg_size_t		msgh_descriptor_count;
+} mach_msg_body_t;
+
+typedef struct {
+	mach_port_t			name;
+	mach_msg_size_t			pad1;
+	unsigned int			pad2 : 16;
+	mach_msg_type_name_t		disposition : 8;
+	mach_msg_descriptor_type_t	type : 8;
+} mach_msg_port_descriptor_t;
+
+#pragma pack()
 
 mach_msg_return_t mach_msg(
     mach_msg_header_t *msg,
