@@ -28,6 +28,31 @@
 #ifndef	_LIBXPC_XPC_INTERNAL_H
 #define	_LIBXPC_XPC_INTERNAL_H
 
+/*
+ * Self-contained include block — on ravynOS these were reached
+ * transitively through whatever umbrella the consumer pulled in
+ * first. On our FreeBSD build those transitive paths don't always
+ * line up, so we include explicitly:
+ *   <sys/queue.h>     — TAILQ_HEAD / TAILQ_ENTRY (the struct macros)
+ *   <sys/types.h>     — uid_t / gid_t / pid_t
+ *   <bsm/audit.h>     — au_asid_t (BSM audit-session ID)
+ *   <stdint.h>        — uint{8,16,32,64}_t / int64_t / uintptr_t
+ *   <stdbool.h>       — bool
+ *   <uuid.h>          — uuid_t (FreeBSD's, not libuuid's)
+ *   <mach/mach.h>     — mach_port_t (and pulls in audit_token_t)
+ *   <dispatch/dispatch.h> — dispatch_queue_t / dispatch_source_t
+ *   <xpc/xpc.h>       — xpc_object_t / xpc_handler_t
+ */
+#include <sys/queue.h>
+#include <sys/types.h>
+#include <bsm/audit.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <uuid.h>
+#include <mach/mach.h>
+#include <dispatch/dispatch.h>
+#include <xpc/xpc.h>
+
 #include <nv.h>
 
 #define debugf(...) 				\
