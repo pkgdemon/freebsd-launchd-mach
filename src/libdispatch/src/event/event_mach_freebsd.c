@@ -50,12 +50,32 @@
 #include <unistd.h>
 
 /*
- * We're outside HAVE_MACH so dispatch/internal Mach headers aren't in
- * scope. Use libsystem_kernel's userland Mach headers, which expose
- * just the userland surface we need (mach_msg, MACH_RCV_*, ...).
+ * libdispatch's src/shims/mach.h provides "fake" mach typedefs
+ * (mach_port_t, mach_msg_return_t, mach_msg_header_t = void *, ...) for
+ * the non-HAVE_MACH build. Including libsystem_kernel's <mach/message.h>
+ * here would collide on those typedefs (CI: "typedef redefinition with
+ * different types"). So instead of pulling that header in, we declare
+ * the minimum surface we need locally and rely on the runtime linker to
+ * resolve mach_msg against libsystem_kernel.so — the symbol name and
+ * ABI match regardless of how the function was prototyped in this TU.
+ * The libdispatch shim already gives us mach_port_t, mach_msg_return_t,
+ * and MACH_PORT_NULL.
  */
-#include <mach/mach_traps.h>
-#include <mach/message.h>
+typedef unsigned int mach_msg_option_t;
+typedef unsigned int mach_msg_size_t;
+typedef unsigned int mach_msg_timeout_t;
+
+#define MACH_RCV_MSG       0x00000002
+#define MACH_RCV_LARGE     0x00000004
+#define MACH_RCV_TIMEOUT   0x00000100
+#define MACH_MSG_SUCCESS   0x00000000
+#define MACH_RCV_TIMED_OUT 0x10004003
+#define MACH_RCV_TOO_LARGE 0x10004004
+
+extern mach_msg_return_t mach_msg(void *msg, mach_msg_option_t option,
+    mach_msg_size_t send_size, mach_msg_size_t rcv_size,
+    mach_port_t rcv_name, mach_msg_timeout_t timeout,
+    mach_port_t notify);
 
 #define DISPATCH_MACH_RECV_POLL_MS	100
 
@@ -83,7 +103,7 @@ _dispatch_mach_recv_poll(void *arg)
 	 * dispatch_release the source before dispatch_activate and trigger
 	 * unote dispose before we've taken our reference.
 	 */
-	mach_port_name_t port = (mach_port_name_t)dr->du_ident;
+	mach_port_t port = (mach_port_t)dr->du_ident;
 
 	uintptr_t wref;
 	int spins = 0;
@@ -120,10 +140,16 @@ _dispatch_mach_recv_poll(void *arg)
 	bool pending = false;
 
 	while (!dispatch_source_testcancel(ds)) {
-		mach_msg_header_t hdr;
-		memset(&hdr, 0, sizeof(hdr));
+		/*
+		 * Receive buffer: with rcv_size=0 the kernel returns
+		 * MACH_RCV_TOO_LARGE without touching this buffer (just
+		 * reports the message stayed on the queue). A small zeroed
+		 * stack array is enough to give mach_msg a valid pointer.
+		 */
+		uint8_t hdrbuf[32];
+		memset(hdrbuf, 0, sizeof(hdrbuf));
 
-		mach_msg_return_t mr = mach_msg(&hdr,
+		mach_msg_return_t mr = mach_msg(hdrbuf,
 		    MACH_RCV_MSG | MACH_RCV_LARGE | MACH_RCV_TIMEOUT,
 		    0,    /* send_size */
 		    0,    /* rcv_size: forces TOO_LARGE without consume */
