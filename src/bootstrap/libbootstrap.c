@@ -17,9 +17,26 @@
 #include <mach/mach_traps.h>
 #include <mach/mach_port.h>
 #include <mach/message.h>
+#include <mach/task_special_ports.h>	/* task_get_bootstrap_port */
 #include <servers/bootstrap.h>
 
 #include "bootstrap_protocol.h"
+
+/*
+ * Process-global bootstrap port. Apple's dyld stashes this before
+ * main(); we do the same in a constructor so Apple-source consumers
+ * (libxpc, launchctl, ...) see it populated. If task_get_bootstrap_port
+ * fails (mach.ko not loaded, host_get_special_port returned null),
+ * it stays MACH_PORT_NULL — bootstrap_check_in / _look_up will then
+ * fail-fast with KERN_FAILURE rather than panic.
+ */
+mach_port_t bootstrap_port = MACH_PORT_NULL;
+
+static void __attribute__((constructor))
+_init_bootstrap_port(void)
+{
+	(void)task_get_bootstrap_port(mach_task_self(), &bootstrap_port);
+}
 
 /*
  * BOOTSTRAP_DEBUG: when set non-zero, libbootstrap traces each

@@ -42,6 +42,17 @@ extern "C" {
 typedef char name_t[128];
 typedef const char *cmd_t;
 
+/*
+ * Process-global bootstrap port. Apple's dyld initializes this before
+ * main() from TASK_BOOTSTRAP_PORT. Our libbootstrap does the same via
+ * a __attribute__((constructor)) in libbootstrap.c — callers see it
+ * already set by the time main() runs. If task_get_bootstrap_port
+ * fails (mach.ko not loaded, no bootstrap server running) it stays
+ * at MACH_PORT_NULL and bootstrap_check_in / bootstrap_look_up
+ * surface that as KERN_FAILURE.
+ */
+extern mach_port_t bootstrap_port;
+
 kern_return_t bootstrap_check_in(mach_port_t bp, const name_t name,
     mach_port_t *port);
 
