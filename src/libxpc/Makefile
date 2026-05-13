@@ -39,8 +39,18 @@ SRCS=		xpc_dictionary.c \
 		subr_nvpair.c \
 		libbootstrap.c
 
-CFLAGS+=	-I${.CURDIR} -I${.CURDIR}/xpc -I${.CURDIR}/../bootstrap
+# SYSROOT — points at the in-build rootfs so we can find the headers
+# libxpc consumes (mach/*, dispatch/*, servers/bootstrap.h) and the
+# libs it links against (libsystem_kernel, libdispatch). build.sh
+# passes SYSROOT=$WORK/rootfs; unset on standalone host build.
+SYSROOT?=
+
+CFLAGS+=	-I${.CURDIR} -I${.CURDIR}/../bootstrap
 CFLAGS+=	-fblocks
+.if !empty(SYSROOT)
+CFLAGS+=	-I${SYSROOT}${PREFIX}/include
+LDADD+=		-L${SYSROOT}${PREFIX}/lib/libsystem
+.endif
 NO_MAN=		yes
 WARNS?=		0	# vendored code; don't gate on style warnings
 
@@ -56,8 +66,9 @@ LIBDIR=		${PREFIX}/lib/libsystem
 
 # Link against libsystem_kernel for Mach trap shims and libdispatch
 # for queue/source primitives. Both are at /usr/lib/libsystem/ per
-# the Phase D layout.
+# the Phase D layout. -rpath so consumers can locate them at runtime.
 LDADD+=		-lsystem_kernel -ldispatch -lpthread
+LDADD+=		-Wl,-rpath,${PREFIX}/lib/libsystem
 
 PREFIX?=	/usr
 

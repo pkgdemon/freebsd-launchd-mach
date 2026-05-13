@@ -500,11 +500,14 @@ cp "$ROOT/src/libmach/include/mach/mach.h" \
 
 echo "==> building libxpc (src/libxpc)"
 mkdir -p "$WORK/rootfs/usr/include/xpc"
+# SYSROOT tells libxpc's Makefile where to find headers + libs of the
+# in-build rootfs. Don't pass CFLAGS / LDFLAGS directly — bmake treats
+# command-line variable assignments as overrides (not appends), which
+# would clobber the Makefile's CFLAGS+= additions.
 make -C "$ROOT/src/libxpc" \
     DESTDIR="$WORK/rootfs" \
     PREFIX=/usr \
-    CFLAGS="-I$WORK/rootfs/usr/include" \
-    LDFLAGS="-L$WORK/rootfs/usr/lib/libsystem -Wl,-rpath,/usr/lib/libsystem" \
+    SYSROOT="$WORK/rootfs" \
     all install
 ls -lh "$WORK/rootfs/usr/lib/libsystem/libxpc.so" \
        "$WORK/rootfs/usr/include/xpc/xpc.h"
