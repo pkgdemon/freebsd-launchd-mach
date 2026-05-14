@@ -223,4 +223,25 @@ else
     exit 1
 fi
 
+# 6. MIG (bootstrap_cmds): Apple's Mach Interface Generator must run on
+# the booted system — prerequisite for the launchd-842 port. We invoked
+# `mig -version` at build time inside the chroot, but the live ISO
+# needs to demonstrate that mig's runtime deps (wrapper script's
+# /usr/bin/cc lookup, migcom binary executes, etc.) are present on the
+# actual VM.
+if [ -x /usr/bin/mig ] && [ -x /usr/libexec/migcom ]; then
+    if /usr/bin/mig -version >/dev/null 2>&1; then
+        echo "MIG-BUILD-OK: /usr/bin/mig and migcom run on the ISO"
+    else
+        rc=$?
+        echo "MIG-BUILD-FAIL: /usr/bin/mig -version exit=$rc"
+        /usr/bin/mig -version 2>&1 || true
+        exit 1
+    fi
+else
+    echo "MIG-BUILD-FAIL: /usr/bin/mig or /usr/libexec/migcom missing"
+    ls -la /usr/bin/mig /usr/libexec/migcom 2>&1 || true
+    exit 1
+fi
+
 exit 0

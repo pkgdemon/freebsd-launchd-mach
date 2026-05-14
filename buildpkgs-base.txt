@@ -34,3 +34,10 @@ FreeBSD-openssl-dev
 # FreeBSD-audit out of the runtime set; the -dev variant lives here so
 # headers are present at build time, then purged before mkuzip.
 FreeBSD-audit-dev
+
+# byacc + flex for migcom build (parser.y + lexxer.l). Both are
+# build-only — generated parser.c / lexxer.c get compiled in and the
+# tools are purged before mkuzip. Apple's bootstrap_cmds source ships
+# both as yacc/lex grammars.
+FreeBSD-byacc
+FreeBSD-flex
