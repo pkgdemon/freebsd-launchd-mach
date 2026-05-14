@@ -613,6 +613,54 @@ chroot "$WORK/rootfs" /usr/bin/mig -version \
 echo "==> mig install verified"
 
 #
+# 3l. Phase I1a — generate launchd-842's MIG RPC stubs.
+#     launchd-842/src/ ships .defs files whose Mach-RPC client/server
+#     stubs MIG code-generates. This step proves the mig we just built
+#     can actually process Apple's .defs against our vendored MIG
+#     type-system (mach/std_types.defs + mach_types.defs +
+#     machine_types.defs, in src/libmach/include/mach/).
+#
+#     Output lands in $WORK/launchd-mig/ — pure build artifacts, not
+#     rootfs content. The launchd daemon build (later I1c step) will
+#     consume them. For now this is the I1a checkpoint: mig runs, the
+#     expected .c/.h come out.
+#
+#     .defs handled: job, job_forward, job_reply, internal, helper.
+#     job_types.defs is a type-only include (no subsystem) — pulled in
+#     by the others, not compiled standalone. protocol_jobmgr.defs is
+#     deliberately skipped: it's NOT in Apple's Xcode build and imports
+#     nonexistent bootstrap_public.h (stale, like bootstrap_cmds'
+#     handler.c). mach_exc.defs / notify.defs are SDK-provided and not
+#     yet vendored — deferred to I1c.
+#
+echo "==> Phase I1a: generating launchd-842 MIG stubs"
+MIG_OUT="$WORK/launchd-mig"
+mkdir -p "$MIG_OUT"
+# mig runs `cc -E` over each .defs; -I must reach our MIG type-system
+# in src/libmach/include/mach/ plus launchd's own liblaunch/ headers
+# (the .defs `import` lines reference vproc.h etc., though those only
+# affect generated #include lines, not mig-time resolution).
+MIG_INCS="-I$ROOT/src/libmach/include -I$ROOT/src/launchd/liblaunch -I$ROOT/src/launchd/src"
+for d in job job_forward job_reply internal helper; do
+    defs="$ROOT/src/launchd/src/${d}.defs"
+    echo "  mig: ${d}.defs"
+    ( cd "$MIG_OUT" && \
+      MIGCC=/usr/bin/cc MIGCOM="$WORK/rootfs/usr/libexec/migcom" \
+      /bin/sh "$ROOT/src/bootstrap_cmds/migcom.tproj/mig.sh" \
+        $MIG_INCS \
+        -header "${d}.h" -user "${d}User.c" -server "${d}Server.c" \
+        "$defs" ) \
+      || { echo "FAIL: mig could not process ${d}.defs"; exit 1; }
+done
+# job.defs is the central one — assert its three outputs exist.
+for f in job.h jobUser.c jobServer.c; do
+    test -s "$MIG_OUT/$f" \
+        || { echo "FAIL: mig produced no $f from job.defs"; exit 1; }
+done
+echo "==> Phase I1a: MIG stubs generated ($(ls "$MIG_OUT" | wc -l | tr -d ' ') files in $MIG_OUT)"
+ls -la "$MIG_OUT"
+
+#
 # 3z. purge build packages + clean pkg cache + tear down chroot.
 #     Runs LAST in the build phase, after every chroot-side build
 #     (libdispatch) has used cmake/ninja/clang. Build pkgs (cmake/ninja

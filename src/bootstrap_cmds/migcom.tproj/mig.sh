@@ -108,14 +108,18 @@ target=
 iSysRootParm=
 
 files=
-# FreeBSD: /usr/bin/arch doesn't exist; uname -m is the equivalent
-# (returns amd64 / arm64 etc. instead of macOS's x86_64 / arm64, but
-# downstream migcom only uses this for -D defines on cpp invocation, so
-# string mismatch is harmless).
+# FreeBSD: /usr/bin/arch doesn't exist, and FreeBSD's clang has no
+# `-arch` driver flag (it's an Apple clang extension). On macOS the
+# cpp pass below runs `cc -E -arch ${arch} ...`; on FreeBSD we drop
+# the -arch flag entirely — the native clang target already predefines
+# the right __x86_64__ / __aarch64__ macros. `arch` is still set (from
+# uname -m) in case an explicit -arch arg or downstream use needs it.
 if [ -x /usr/bin/arch ]; then
   arch=`/usr/bin/arch`
+  archflag="-arch ${arch}"
 else
   arch=`/usr/bin/uname -m`
+  archflag=
 fi
 
 WORKTMP=`/usr/bin/mktemp -d "${TMPDIR:-/tmp}/mig.XXXXXX"`
@@ -138,7 +142,7 @@ do
 	-sheader ) sheader="$2"; migflags="${migflags} $1 $2"; shift; shift;;
 	-iheader ) iheader="$2"; migflags="${migflags} $1 $2"; shift; shift;;
 	-dheader ) dheader="$2"; migflags="${migflags} $1 $2"; shift; shift;;
-	-arch ) arch="$2"; shift; shift;;
+	-arch ) arch="$2"; if [ -x /usr/bin/arch ]; then archflag="-arch $2"; fi; shift; shift;;
 	-target ) target="$1 $2"; shift; shift;;
 	-maxonstack ) migflags="${migflags} $1 $2"; shift; shift;;
 	-split ) migflags="${migflags} $1"; shift;;
@@ -202,10 +206,10 @@ do
     if [ -n "$MIG_TRACE_HEADERS" ]
     then
       env CC_PRINT_HEADERS_FORMAT=json CC_PRINT_HEADERS_FILTERING=only-direct-system CC_PRINT_HEADERS_FILE="$MIG_TRACE_HEADERS" \
-        "$C" -E -arch ${arch} ${target} ${cppflags} -I "${sourcedir}" ${iSysRootParm} "${temp}.c" | "$M" ${migflags}
+        "$C" -E ${archflag} ${target} ${cppflags} -I "${sourcedir}" ${iSysRootParm} "${temp}.c" | "$M" ${migflags}
     else
       env -u CC_PRINT_HEADERS_FORMAT \
-        "$C" -E -arch ${arch} ${target} ${cppflags} -I "${sourcedir}" ${iSysRootParm} "${temp}.c" | "$M" ${migflags}
+        "$C" -E ${archflag} ${target} ${cppflags} -I "${sourcedir}" ${iSysRootParm} "${temp}.c" | "$M" ${migflags}
     fi
     if [ $? -ne 0 ]
     then
