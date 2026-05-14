@@ -38,6 +38,7 @@ SRCS=		xpc_dictionary.c \
 		subr_nvlist.c \
 		subr_nvpair.c \
 		msgio.c \
+		stubs.c \
 		libbootstrap.c
 
 # SYSROOT — points at the in-build rootfs so we can find the headers
@@ -67,8 +68,11 @@ LIBDIR=		${PREFIX}/lib/libsystem
 
 # Link against libsystem_kernel for Mach trap shims and libdispatch
 # for queue/source primitives. Both are at /usr/lib/libsystem/ per
-# the Phase D layout. -rpath so consumers can locate them at runtime.
-LDADD+=		-lsystem_kernel -ldispatch -lpthread
+# the Phase D layout. -lBlocksRuntime resolves _Block_copy /
+# _NSConcreteStackBlock etc. from -fblocks; -lsbuf resolves the
+# sbuf_* API xpc_misc.c uses for xpc_copy_description. -rpath lets
+# rtld find our libsystem dir at runtime.
+LDADD+=		-lsystem_kernel -ldispatch -lBlocksRuntime -lsbuf -lpthread
 LDADD+=		-Wl,-rpath,${PREFIX}/lib/libsystem
 
 PREFIX?=	/usr
