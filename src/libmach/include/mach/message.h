@@ -34,6 +34,12 @@ typedef int          mach_msg_return_t;
 typedef mach_port_name_t mach_port_t;
 typedef unsigned char mach_msg_type_name_t;	/* port-right disposition */
 
+/* mach_msg_type_number_t — element count for typed message data /
+ * out-of-line arrays. Apple defines it as natural_t (from
+ * <mach/std_types.h>, pulled in above). MIG-generated stubs and
+ * migcom's type.c both use it for array-length fields. */
+typedef natural_t mach_msg_type_number_t;
+
 /*
  * boolean_t — Apple uses it pervasively in Mach APIs. On macOS it
  * lives in <mach/boolean.h>; we inline the typedef here so any
