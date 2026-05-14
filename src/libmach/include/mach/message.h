@@ -120,6 +120,26 @@ typedef struct {
 #define MACH_MSG_TYPE_POLYMORPHIC	((mach_msg_type_name_t)-1)
 
 /*
+ * Function-like predicate macros — "is this disposition a port-right
+ * of some flavor?". migcom uses MACH_MSG_TYPE_PORT_ANY to classify
+ * .defs types; MIG-generated stubs use all three. Without the macro
+ * defined, the compiler treats MACH_MSG_TYPE_PORT_ANY(x) as an
+ * implicit function call and the link fails with "undefined symbol".
+ * Bodies match Apple's <mach/message.h> exactly.
+ */
+#define MACH_MSG_TYPE_PORT_ANY(x)			\
+	(((x) >= MACH_MSG_TYPE_MOVE_RECEIVE) &&		\
+	 ((x) <= MACH_MSG_TYPE_MAKE_SEND_ONCE))
+
+#define MACH_MSG_TYPE_PORT_ANY_SEND(x)			\
+	(((x) >= MACH_MSG_TYPE_MOVE_SEND) &&		\
+	 ((x) <= MACH_MSG_TYPE_MAKE_SEND_ONCE))
+
+#define MACH_MSG_TYPE_PORT_ANY_RIGHT(x)			\
+	(((x) >= MACH_MSG_TYPE_MOVE_RECEIVE) &&		\
+	 ((x) <= MACH_MSG_TYPE_MOVE_SEND_ONCE))
+
+/*
  * MACH_MSGH_BITS(remote, local) — pack a remote-port and local-port
  * disposition into msgh_bits. Matches sys/mach/message.h.
  */
