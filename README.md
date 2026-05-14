@@ -304,6 +304,56 @@ if we later want to support Apple-source consumers that use it
 directly (e.g., specific Apple frameworks); none of our current
 Phase F-G targets do.
 
+**Phase I0 (MIG &mdash; `bootstrap_cmds`)** &mdash; *done.* Vendored
+Apple's `bootstrap_cmds-138` into `src/bootstrap_cmds/` and got the
+Mach Interface Generator building on FreeBSD: `migcom` (the compiler
+backend) at `/usr/libexec/migcom`, `mig` (the wrapper) at
+`/usr/bin/mig`. The wrapper script was rewritten from bash to POSIX
+`/bin/sh` (FreeBSD base ships no bash) and de-Xcode'd (no `xcrun`, no
+`-arch`). `byacc` + `flex` for the `parser.y` / `lexxer.l` grammars
+come from `FreeBSD-toolchain`. Smoke marker: `MIG-BUILD-OK`. MIG is
+the prerequisite for the launchd-842 port &mdash; launchd ships seven
+`.defs` files whose Mach-RPC stubs are code-generated.
+
+**Phase I1 (launchd-842 port)** &mdash; *in progress.* Vendored
+Apple's last open-source launchd (`launchd-842.92.1`,
+`apple-oss-distributions/launchd`) into `src/launchd/` &mdash; `src/`
++ `liblaunch/` + `support/`, ~27k LOC; `SystemStarter/` skipped.
+Sub-phases:
+
+- **I1a &mdash; MIG stub generation** &mdash; *done.* Vendored the
+  MIG type-system (`std_types.defs` / `mach_types.defs` /
+  `machine_types.defs`) into `src/libmach/include/mach/`; `build.sh`
+  runs `mig` over launchd's `job` / `job_forward` / `job_reply` /
+  `internal` / `helper` `.defs` files, producing 15 generated `.c`/
+  `.h` stubs. `protocol_jobmgr.defs` is excluded &mdash; it's dead
+  code, not in Apple's Xcode build.
+- **I1b &mdash; `liblaunch`** &mdash; *done.* `liblaunch.so.1` builds
+  and installs at `/usr/lib/libsystem/`. The bulk of the work was a
+  header gauntlet: ~14 new `<mach/*>` headers in `libmach`
+  (`boolean.h`, `kern_return.h`, `std_types.h`, `ndr.h`, `machine.h`,
+  `vm_map.h`, `clock_types.h`, `port.h`, `notify.h`, `mach_types.h`,
+  `mig_errors.h`, `mig.h`, `thread_status.h`, `mach_error.h`) plus 8
+  Apple-private shims in `src/launchd/freebsd-shims/`
+  (`TargetConditionals.h`, `AvailabilityMacros.h`, `libkern/OS*.h`,
+  `os/assumes.h`, `libproc.h`, `quarantine.h`, `System/sys/fileport.h`,
+  `malloc/malloc.h`). `<uuid/uuid.h>` was rewritten as a real
+  libuuid-API shim (array `uuid_t` + `uuid_generate` / `uuid_unparse`
+  / &hellip;), with libxpc's `libnv` + `xpc_misc.c` / `xpc_type.c`
+  updated to match.
+- **I1c &mdash; `launchd` daemon binary** &mdash; *next.* `core.c`
+  alone is 12k LOC; needs the MIG output linked, the full shim
+  surface, and the MIG-runtime symbols resolved.
+- **I1d &mdash; `launchctl`** &mdash; *pending.*
+- **I1e &mdash; `LAUNCHD-BUILD-OK` marker** &mdash; *pending.*
+  Phase I1's exit criterion: `launchd` + `launchctl` binaries build
+  and execute their no-IPC CLI paths (`launchd -h`, `launchctl help`).
+
+After I1, an explicit checkpoint precedes any PID-1 work (Phase I2:
+core functionality &mdash; KeepAlive, WatchPaths, Sockets, &hellip;).
+See the [launchd-842 porting
+plan](https://pkgdemon.github.io/freebsd-launchd-842-porting-plan.html).
+
 Plan docs:
 
 - [**`freebsd-libxpc-plan`**](https://pkgdemon.github.io/freebsd-libxpc-plan.html)
