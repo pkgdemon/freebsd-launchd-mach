@@ -521,16 +521,15 @@ nvlist_dump(const nvlist_t *nvl, int fd)
 		    }
 		case NV_TYPE_UUID:
 		    {
-		    	char *str;
-		    	int status;
+		    	/* FreeBSD port: was DCE uuid_to_string()/uuid_s_ok;
+		    	 * ported to libuuid uuid_unparse (caller buffer, no
+		    	 * malloc, no status-out) to match nv.h's <uuid/uuid.h>. */
+		    	char str[37];
 		    	const uuid_t *uuid;
 
 		    	uuid = nvpair_get_uuid(nvp);
-		    	uuid_to_string(uuid, &str, &status);
-		    	if (status == uuid_s_ok)
-		    		dprintf(fd, " [%s]\n", str);
-
-		    	free(str);
+		    	uuid_unparse(*uuid, str);
+		    	dprintf(fd, " [%s]\n", str);
 		    	break;
 		    }
 		default:

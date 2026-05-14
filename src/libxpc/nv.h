@@ -39,7 +39,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <uuid.h>
+/* FreeBSD port: was <uuid.h> (FreeBSD's DCE uuid API, uuid_t = struct
+ * uuid). The rest of our stack — launchd's liblaunch, libxpc's
+ * xpc_*.c — uses the libuuid API (<uuid/uuid.h>, uuid_t = unsigned
+ * char[16]). The two cannot coexist in one TU (clashing uuid_t
+ * typedef + clashing uuid_compare/uuid_is_null signatures), so nv.h
+ * uses libuuid too. The nvlist_*_uuid / nvpair_*_uuid functions only
+ * treat uuid_t as a sizeof(uuid_t)==16 blob, so the API choice is
+ * transparent to them; the one DCE call (uuid_to_string in
+ * nvlist_dump) is ported to uuid_unparse in subr_nvlist.c. */
+#include <uuid/uuid.h>
 #else
 #include <sys/uuid.h>
 #endif
