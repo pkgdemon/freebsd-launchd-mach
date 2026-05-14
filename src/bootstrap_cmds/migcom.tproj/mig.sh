@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Copyright (c) 1999-2008 Apple Inc. All rights reserved.
 #
@@ -46,16 +46,24 @@
 # any improvements or extensions that they make and grant Carnegie Mellon
 # the rights to redistribute these changes.
 #
+# ---------------------------------------------------------------------------
+# FreeBSD port note: Apple ships this as a bash script (#!/bin/bash) using
+# bash arrays for flag accumulation. FreeBSD base ships no bash, so this
+# is rewritten for POSIX /bin/sh: bash arrays become space-separated
+# strings expanded unquoted at the use site. Individual mig flag tokens
+# and filenames never contain spaces in practice (Apple's own build, our
+# launchd-842 .defs invocations), so word-splitting is the right
+# behavior here. pushd/popd in realpath() become a cd-subshell; the
+# bash `==` test operator becomes POSIX `=`.
+# ---------------------------------------------------------------------------
 
 realpath()
 {
-	local FILE="$1"
-	local PARENT=$(dirname "$FILE")
-	local BASE=$(basename "$FILE")
-	pushd "$PARENT" >/dev/null 2>&1 || return 0
-	local DIR=$(pwd -P)
-	popd >/dev/null
-	if [ "$DIR" == "/" ]; then
+	FILE="$1"
+	PARENT=$(dirname "$FILE")
+	BASE=$(basename "$FILE")
+	DIR=$(cd "$PARENT" >/dev/null 2>&1 && pwd -P) || return 0
+	if [ "$DIR" = "/" ]; then
 		echo "/$BASE"
 	else
 		echo "$DIR/$BASE"
@@ -93,6 +101,12 @@ fi
 
 cppflags="-D__MACH30__"
 
+# Flag accumulators — bash arrays in the original; space-separated
+# strings here, expanded unquoted where used.
+migflags=
+target=
+iSysRootParm=
+
 files=
 # FreeBSD: /usr/bin/arch doesn't exist; uname -m is the equivalent
 # (returns amd64 / arm64 etc. instead of macOS's x86_64 / arm64, but
@@ -116,28 +130,28 @@ fi
 until [ $# -eq 0 ]
 do
     case "$1" in
-	-[dtqkKQvVtTrRsSlLxXnN] ) migflags=( "${migflags[@]}" "$1" ); shift;;
-	-i	) sawI=1; migflags=( "${migflags[@]}" "$1" "$2" ); shift; shift;;
-	-user   )  user="$2"; if [ ! "${sawI-}" ]; then migflags=( "${migflags[@]}" "$1" "$2" ); fi; shift; shift;;
-	-server )  server="$2";  migflags=( "${migflags[@]}" "$1" "$2" ); shift; shift;;
-	-header )  header="$2";  migflags=( "${migflags[@]}" "$1" "$2"); shift; shift;;
-	-sheader ) sheader="$2"; migflags=( "${migflags[@]}" "$1" "$2"); shift; shift;;
-	-iheader ) iheader="$2"; migflags=( "${migflags[@]}" "$1" "$2"); shift; shift;;
-	-dheader ) dheader="$2"; migflags=( "${migflags[@]}" "$1" "$2"); shift; shift;;
+	-[dtqkKQvVtTrRsSlLxXnN] ) migflags="${migflags} $1"; shift;;
+	-i	) sawI=1; migflags="${migflags} $1 $2"; shift; shift;;
+	-user   )  user="$2"; if [ ! "${sawI-}" ]; then migflags="${migflags} $1 $2"; fi; shift; shift;;
+	-server )  server="$2";  migflags="${migflags} $1 $2"; shift; shift;;
+	-header )  header="$2";  migflags="${migflags} $1 $2"; shift; shift;;
+	-sheader ) sheader="$2"; migflags="${migflags} $1 $2"; shift; shift;;
+	-iheader ) iheader="$2"; migflags="${migflags} $1 $2"; shift; shift;;
+	-dheader ) dheader="$2"; migflags="${migflags} $1 $2"; shift; shift;;
 	-arch ) arch="$2"; shift; shift;;
-	-target ) target=( "$1" "$2"); shift; shift;;
-	-maxonstack ) migflags=( "${migflags[@]}" "$1" "$2"); shift; shift;;
-	-split ) migflags=( "${migflags[@]}" "$1" ); shift;;
-	-novouchers ) migflags=( "${migflags[@]}" "$1" ); shift;;
-	-mach_msg2 ) migflags=( "${migflags[@]}" "$1" ); shift;;
-	-max_descrs) migflags=( "${migflags[@]}" "$1" "$2"); shift; shift;;
-	-max_reply_descrs) migflags=( "${migflags[@]}" "$1" "$2"); shift; shift;;
-	-MD ) sawMD=1; cppflags=( "${cppflags[@]}" "$1"); shift;;
+	-target ) target="$1 $2"; shift; shift;;
+	-maxonstack ) migflags="${migflags} $1 $2"; shift; shift;;
+	-split ) migflags="${migflags} $1"; shift;;
+	-novouchers ) migflags="${migflags} $1"; shift;;
+	-mach_msg2 ) migflags="${migflags} $1"; shift;;
+	-max_descrs) migflags="${migflags} $1 $2"; shift; shift;;
+	-max_reply_descrs) migflags="${migflags} $1 $2"; shift; shift;;
+	-MD ) sawMD=1; cppflags="${cppflags} $1"; shift;;
 	-cpp) shift; shift;;
 	-cc) C="$2"; shift; shift;;
 	-migcom) M="$2"; shift; shift;;
 	-isysroot) sdkRoot=$(realpath "$2"); shift; shift;;
-	-* ) cppflags=( "${cppflags[@]}" "$1"); shift;;
+	-* ) cppflags="${cppflags} $1"; shift;;
 	* ) break;;
     esac
 done
@@ -175,7 +189,7 @@ do
     sourcedir="$(dirname "${file}")"
     if [ -n "${sdkRoot}" ]
     then
-      iSysRootParm=( "-isysroot" "${sdkRoot}" )
+      iSysRootParm="-isysroot ${sdkRoot}"
     fi
     if [ ! -r "${file}" ]
     then
@@ -188,10 +202,10 @@ do
     if [ -n "$MIG_TRACE_HEADERS" ]
     then
       env CC_PRINT_HEADERS_FORMAT=json CC_PRINT_HEADERS_FILTERING=only-direct-system CC_PRINT_HEADERS_FILE="$MIG_TRACE_HEADERS" \
-        "$C" -E -arch ${arch} "${target[@]}" "${cppflags[@]}" -I "${sourcedir}" "${iSysRootParm[@]}" "${temp}.c" | "$M" "${migflags[@]}"
+        "$C" -E -arch ${arch} ${target} ${cppflags} -I "${sourcedir}" ${iSysRootParm} "${temp}.c" | "$M" ${migflags}
     else
       env -u CC_PRINT_HEADERS_FORMAT \
-        "$C" -E -arch ${arch} "${target[@]}" "${cppflags[@]}" -I "${sourcedir}" "${iSysRootParm[@]}" "${temp}.c" | "$M" "${migflags[@]}"
+        "$C" -E -arch ${arch} ${target} ${cppflags} -I "${sourcedir}" ${iSysRootParm} "${temp}.c" | "$M" ${migflags}
     fi
     if [ $? -ne 0 ]
     then
@@ -226,7 +240,7 @@ do
 	if [ "${rdheader}" != /dev/null ]; then
 		deps="${deps}${s}${rdheader}"; s=" "
 	fi
-	for target in "${deps}"
+	for target in ${deps}
 	do
 		sed -e 's;^'"${temp}"'.o[ 	]*:;'"${target}"':;' \
 		    -e 's;: '"${temp}"'.c;: '"$file"';' \
@@ -243,4 +257,3 @@ done
 
 /bin/rmdir "${WORKTMP}"
 exit 0
-
