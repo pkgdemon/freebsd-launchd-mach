@@ -644,11 +644,14 @@ MIG_INCS="-I$ROOT/src/libmach/include -I$ROOT/src/launchd/liblaunch -I$ROOT/src/
 for d in job job_forward job_reply internal helper; do
     defs="$ROOT/src/launchd/src/${d}.defs"
     echo "  mig: ${d}.defs"
+    # -sheader emits ${d}Server.h — libvproc.c #includes helperServer.h
+    # to drive a helper-downcall server via mach_msg_server_once().
     ( cd "$MIG_OUT" && \
       MIGCC=/usr/bin/cc MIGCOM="$WORK/rootfs/usr/libexec/migcom" \
       /bin/sh "$ROOT/src/bootstrap_cmds/migcom.tproj/mig.sh" \
         $MIG_INCS \
-        -header "${d}.h" -user "${d}User.c" -server "${d}Server.c" \
+        -header "${d}.h" -user "${d}User.c" \
+        -server "${d}Server.c" -sheader "${d}Server.h" \
         "$defs" ) \
       || { echo "FAIL: mig could not process ${d}.defs"; exit 1; }
 done
@@ -659,6 +662,30 @@ for f in job.h jobUser.c jobServer.c; do
 done
 echo "==> Phase I1a: MIG stubs generated ($(ls "$MIG_OUT" | wc -l | tr -d ' ') files in $MIG_OUT)"
 ls -la "$MIG_OUT"
+
+#
+# 3m. Phase I1b — build liblaunch (src/launchd/liblaunch).
+#     Apple's launch_data IPC library — the foundation launchd +
+#     launchctl both link against. Three TUs: liblaunch.c (launch_data
+#     API + launch_msg socket IPC), libvproc.c (vproc handles +
+#     helper-downcall server), libbootstrap.c (bootstrap client
+#     wrappers). Host build via bsd.lib.mk, same pattern as
+#     libsystem_kernel. MIGOUT points the build at the I1a stubs.
+#
+#     Install: /usr/lib/libsystem/liblaunch.so + .so.1
+#     Headers NOT installed yet — deferred to the I1c launchd build,
+#     same way <mach/mach.h> was deferred past the libdispatch build.
+#
+echo "==> Phase I1b: building liblaunch (src/launchd/liblaunch)"
+make -C "$ROOT/src/launchd/liblaunch" \
+    DESTDIR="$WORK/rootfs" \
+    PREFIX=/usr \
+    MIGOUT="$MIG_OUT" \
+    all install
+ls -lh "$WORK/rootfs/usr/lib/libsystem/liblaunch.so" \
+       "$WORK/rootfs/usr/lib/libsystem/liblaunch.so.1"
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+echo "==> Phase I1b: liblaunch built + installed"
 
 #
 # 3z. purge build packages + clean pkg cache + tear down chroot.
