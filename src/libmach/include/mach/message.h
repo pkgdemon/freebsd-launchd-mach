@@ -239,6 +239,19 @@ typedef struct {
 	unsigned int			val[2];
 } security_token_t;
 
+/* mach_msg_security_trailer_t — trailer with seqno + sender token but
+ * no audit token. mach_msg_format_0_trailer_t is Apple's alias for it;
+ * the MIG-generated Mach notification structs (mach/notify.h) embed a
+ * mach_msg_format_0_trailer_t at the end of every notification. */
+typedef struct {
+	mach_msg_trailer_type_t		msgh_trailer_type;
+	mach_msg_trailer_size_t		msgh_trailer_size;
+	mach_port_seqno_t		msgh_seqno;
+	security_token_t		msgh_sender;
+} mach_msg_security_trailer_t;
+
+typedef mach_msg_security_trailer_t mach_msg_format_0_trailer_t;
+
 typedef struct {
 	mach_msg_trailer_type_t		msgh_trailer_type;
 	mach_msg_trailer_size_t		msgh_trailer_size;
