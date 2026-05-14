@@ -22,5 +22,6 @@
 #include <mach/machine.h>		/* cpu_type_t, cpu_subtype_t */
 #include <mach/vm_map.h>			/* vm_deallocate, mach_vm_address_t */
 #include <mach/mig_errors.h>		/* mig_reply_error_t, MIG_NO_REPLY */
+#include <mach/mach_error.h>		/* mach_error_string */
 
 #endif /* !_MACH_MACH_H_ */
