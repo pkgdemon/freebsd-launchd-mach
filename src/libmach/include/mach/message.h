@@ -74,13 +74,35 @@ typedef struct {
 #define MACH_RCV_TOO_LARGE	0x10004004
 
 /*
- * msgh_bits port-disposition values (subset of MACH_MSG_TYPE_*). 21 =
- * MAKE_SEND_ONCE — sender constructs a send-once right from a receive
- * right it owns, which is the path used to send a message to one's own
- * receive port (e.g., self-test wakeups for the libdispatch Mach RECV
- * polling thread).
+ * MACH_MSG_TYPE_* — port-right disposition values used in msgh_bits and
+ * in port-right-transfer calls (mach_port_insert_right, MIG descriptors,
+ * etc.). Apple keeps the complete set in <mach/message.h>; we follow
+ * suit so Apple-source consumers (migcom, MIG-generated stubs,
+ * launchd-842) that #include only <mach/message.h> get all of them.
+ * <mach/mach_port.h> #includes us and relies on these definitions
+ * rather than re-declaring its own copy.
+ *
+ * The MOVE/COPY/MAKE family (16..22) are the concrete dispositions;
+ * the PORT_* names are the abstract aliases MIG uses in .defs files;
+ * POLYMORPHIC is the "disposition determined at runtime" sentinel.
  */
+#define MACH_MSG_TYPE_PORT_NONE		0
+
+#define MACH_MSG_TYPE_MOVE_RECEIVE	16
+#define MACH_MSG_TYPE_MOVE_SEND		17
+#define MACH_MSG_TYPE_MOVE_SEND_ONCE	18
+#define MACH_MSG_TYPE_COPY_SEND		19
+#define MACH_MSG_TYPE_MAKE_SEND		20
 #define MACH_MSG_TYPE_MAKE_SEND_ONCE	21
+#define MACH_MSG_TYPE_COPY_RECEIVE	22
+
+#define MACH_MSG_TYPE_PORT_NAME		15
+#define MACH_MSG_TYPE_PORT_RECEIVE	MACH_MSG_TYPE_MOVE_RECEIVE
+#define MACH_MSG_TYPE_PORT_SEND		MACH_MSG_TYPE_MOVE_SEND
+#define MACH_MSG_TYPE_PORT_SEND_ONCE	MACH_MSG_TYPE_MOVE_SEND_ONCE
+#define MACH_MSG_TYPE_LAST		22
+
+#define MACH_MSG_TYPE_POLYMORPHIC	((mach_msg_type_name_t)-1)
 
 /*
  * MACH_MSGH_BITS(remote, local) — pack a remote-port and local-port

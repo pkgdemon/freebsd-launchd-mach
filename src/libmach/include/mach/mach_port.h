@@ -46,16 +46,12 @@ typedef unsigned int mach_port_right_t;
 #define MACH_PORT_RIGHT_PORT_SET    ((mach_port_right_t)3)
 #define MACH_PORT_RIGHT_DEAD_NAME   ((mach_port_right_t)4)
 
-/* mach_msg_type_name_t (port-right disposition) values. Subset of
- * MACH_MSG_TYPE_* from <sys/mach/message.h>; the MAKE_* values are
- * what libxpc reaches for via mach_port_insert_right. */
-#define MACH_MSG_TYPE_MOVE_RECEIVE     ((mach_msg_type_name_t)16)
-#define MACH_MSG_TYPE_MOVE_SEND        ((mach_msg_type_name_t)17)
-#define MACH_MSG_TYPE_MOVE_SEND_ONCE   ((mach_msg_type_name_t)18)
-#define MACH_MSG_TYPE_COPY_SEND        ((mach_msg_type_name_t)19)
-#define MACH_MSG_TYPE_MAKE_SEND        ((mach_msg_type_name_t)20)
-/* MACH_MSG_TYPE_MAKE_SEND_ONCE (21) already declared in <mach/message.h>. */
-#define MACH_MSG_TYPE_COPY_RECEIVE     ((mach_msg_type_name_t)22)
+/* MACH_MSG_TYPE_* port-right dispositions now live in their Apple-
+ * canonical home, <mach/message.h> (which this header #includes
+ * above). The full set — MOVE_*/COPY_*/MAKE_*, PORT_* aliases,
+ * POLYMORPHIC — is declared there once; declaring them here too
+ * caused duplicate-definition breakage when migcom pulled in only
+ * <mach/message.h>. */
 
 kern_return_t mach_port_allocate(mach_port_name_t task,
     mach_port_right_t right, mach_port_name_t *name);
