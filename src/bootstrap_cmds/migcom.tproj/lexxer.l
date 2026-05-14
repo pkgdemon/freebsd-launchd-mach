@@ -71,7 +71,7 @@ FileName	({QString}|{AString})
 #include <mach/std_types.h>
 #include "statement.h"
 #include "global.h"
-#include "y.tab.h" // was parser.h
+#include "parser.h" // FreeBSD port: bsd.prog.mk yacc -d emits parser.h, not y.tab.h
 #include "lexxer.h"
 #include "mig_machine.h"
 

@@ -15,10 +15,13 @@ PROG=		migcom
 NO_MAN=		yes		# man pages installed separately (mig.1, migcom.1)
 WARNS?=		0		# vendored code; don't gate on style warnings
 
-# Yacc generates parser.c + parser.h. The generated parser uses yylex /
-# yyparse — matches the lexxer.l output. -d emits the header so other
-# sources can pull token definitions in.
-YFLAGS=		-d -o parser.c
+# Yacc: -d emits the token header. Don't pass -o — FreeBSD's bsd.prog.mk
+# .y.c transformation already renames the yacc output to ${.PREFIX}.c
+# (parser.c) and, with -d, emits ${.PREFIX}.h (parser.h). Overriding -o
+# fights that rule. lexxer.l #includes "parser.h" to pick up the tokens;
+# parser.h must therefore exist before lexxer.c compiles (see the
+# explicit dependency near the bottom of this Makefile).
+YFLAGS=		-d
 
 SRCS=		parser.y \
 		lexxer.l \
@@ -55,3 +58,9 @@ BINDIR=		/usr/libexec	# canonical Apple path
 PREFIX?=	/usr
 
 .include <bsd.prog.mk>
+
+# lexxer.l #includes "parser.h" (the yacc -d token header). Without an
+# explicit dependency, make may compile lexxer.c before parser.y has
+# been processed. Force the ordering for every lexxer object variant
+# bsd.prog.mk might build (.o / .pieo / .pico).
+lexxer.o lexxer.pieo lexxer.pico: parser.h
