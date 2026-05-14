@@ -17,26 +17,25 @@
 #include <mach/mach_traps.h>
 #include <mach/mach_port.h>
 #include <mach/message.h>
-#include <mach/task_special_ports.h>	/* task_get_bootstrap_port */
 #include <servers/bootstrap.h>
 
 #include "bootstrap_protocol.h"
 
 /*
- * Process-global bootstrap port. Apple's dyld stashes this before
- * main(); we do the same in a constructor so Apple-source consumers
- * (libxpc, launchctl, ...) see it populated. If task_get_bootstrap_port
- * fails (mach.ko not loaded, host_get_special_port returned null),
- * it stays MACH_PORT_NULL — bootstrap_check_in / _look_up will then
- * fail-fast with KERN_FAILURE rather than panic.
+ * Process-global bootstrap port. Apple's dyld populates this from
+ * TASK_BOOTSTRAP_PORT before main(); we leave it MACH_PORT_NULL at
+ * process load and rely on callers to set it explicitly. A previous
+ * iteration tried a __attribute__((constructor)) that called
+ * task_get_bootstrap_port at .so load time, but that exposed a latent
+ * mach.ko bug: when the test harness SIGKILLs bootstrap_server, the
+ * host slot HOST_BOOTSTRAP_PORT keeps a dangling reference, and the
+ * next task_get_special_port → ipc_port_copyout_send page-faults the
+ * kernel. Until the kernel sweeps host special slots on port
+ * destruction (or NULL-checks before copyout), the constructor stays
+ * removed. xpc_connection.c consumers that read bootstrap_port
+ * directly will see MACH_PORT_NULL until somebody assigns it.
  */
 mach_port_t bootstrap_port = MACH_PORT_NULL;
-
-static void __attribute__((constructor))
-_init_bootstrap_port(void)
-{
-	(void)task_get_bootstrap_port(mach_task_self(), &bootstrap_port);
-}
 
 /*
  * BOOTSTRAP_DEBUG: when set non-zero, libbootstrap traces each
