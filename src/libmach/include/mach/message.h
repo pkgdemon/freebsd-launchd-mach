@@ -165,6 +165,17 @@ typedef unsigned char mach_msg_descriptor_type_t;
 #define MACH_MSG_OOL_VOLATILE_DESCRIPTOR	3
 
 /*
+ * mach_msg_copy_options_t — how the kernel transfers OOL memory:
+ * PHYSICAL_COPY (eager copy), VIRTUAL_COPY (copy-on-write),
+ * ALLOCATE (kernel allocates fresh pages on the receiver side).
+ */
+typedef unsigned int mach_msg_copy_options_t;
+#define MACH_MSG_PHYSICAL_COPY		0
+#define MACH_MSG_VIRTUAL_COPY		1
+#define MACH_MSG_ALLOCATE		2
+#define MACH_MSG_OVERWRITE		3
+
+/*
  * Complex-message layout: header + body + descriptors + payload.
  *
  *   - mach_msg_body_t holds descriptor_count.
@@ -200,6 +211,46 @@ typedef struct {
 	mach_msg_type_name_t		disposition;	/* 1 — MACH_MSG_TYPE_* */
 	mach_msg_descriptor_type_t	type;		/* 1 — MACH_MSG_PORT_DESCRIPTOR */
 } mach_msg_port_descriptor_t;	/* total: 12 bytes */
+
+/*
+ * OOL (out-of-line) descriptors — carry memory / port arrays passed
+ * by reference rather than inline in the message body. Apple's
+ * headers express the deallocate/copy/pad/type/disposition fields as
+ * `:8` bitfields; we use plain uint8_t fields for the same reason as
+ * mach_msg_port_descriptor_t above — clang's bitfield packing across
+ * differently-typed members is not wire-deterministic. LP64 layout
+ * (our only target): 8-byte address first, then the 4 single-byte
+ * fields, then the 4-byte size/count. Total 16 bytes each.
+ */
+typedef struct {
+	void			*address;	/* 8 */
+	uint8_t			deallocate;	/* 1 */
+	uint8_t			copy;		/* 1 — mach_msg_copy_options_t */
+	uint8_t			pad1;		/* 1 */
+	mach_msg_descriptor_type_t type;	/* 1 — MACH_MSG_OOL_DESCRIPTOR */
+	mach_msg_size_t		size;		/* 4 */
+} mach_msg_ool_descriptor_t;	/* total: 16 bytes */
+
+typedef struct {
+	void			*address;	/* 8 */
+	uint8_t			deallocate;	/* 1 */
+	uint8_t			copy;		/* 1 — mach_msg_copy_options_t */
+	mach_msg_type_name_t	disposition;	/* 1 — MACH_MSG_TYPE_* */
+	mach_msg_descriptor_type_t type;	/* 1 — MACH_MSG_OOL_PORTS_DESCRIPTOR */
+	mach_msg_size_t		count;		/* 4 */
+} mach_msg_ool_ports_descriptor_t;	/* total: 16 bytes */
+
+/*
+ * mach_msg_descriptor_t — the tagged union a complex message's body
+ * is an array of. The `type` byte sits at the same offset in every
+ * member, so the receiver can switch on it. All three members are
+ * 12 or 16 bytes; the union is 16.
+ */
+typedef union {
+	mach_msg_port_descriptor_t	port;
+	mach_msg_ool_descriptor_t	out_of_line;
+	mach_msg_ool_ports_descriptor_t	ool_ports;
+} mach_msg_descriptor_t;
 
 #pragma pack()
 
