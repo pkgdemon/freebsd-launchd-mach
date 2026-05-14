@@ -48,7 +48,8 @@ INCS=		include/mach/mach_traps.h \
 		include/mach/vm_map.h \
 		include/mach/clock_types.h \
 		include/mach/port.h \
-		include/mach/notify.h
+		include/mach/notify.h \
+		include/mach/mach_types.h
 INCSDIR=	${PREFIX}/include/mach
 LIBDIR=		${PREFIX}/lib/libsystem
 
