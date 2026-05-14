@@ -56,6 +56,14 @@ CFLAGS+=	-I${.CURDIR}/../../libmach/include
 # launchd-842 use since we only target 64-bit.
 CFLAGS+=	-DMIG_TYPE_CHECK=1
 
+# MIG_VERSION — Apple's Xcode build sets this to
+# $(RC_ProjectNameAndSourceVersion), i.e. the bootstrap_cmds release
+# tag. Used as a string literal in mig.c (`mig -version` output) and in
+# utils.c (string-concatenated into generated-stub headers), so it must
+# be a quoted string. This clone is bootstrap_cmds-138; the -freebsd
+# suffix flags that it's our port, not a stock Apple build.
+CFLAGS+=	-DMIG_VERSION=\"bootstrap_cmds-138-freebsd\"
+
 BINDIR=		/usr/libexec	# canonical Apple path
 
 PREFIX?=	/usr
