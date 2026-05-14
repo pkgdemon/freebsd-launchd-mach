@@ -14,6 +14,7 @@
 #define _MACH_MACH_H_
 
 #include <mach/mach_traps.h>		/* mach_reply_port, mach_task_self, ... */
+#include <mach/port.h>			/* mach_port_t, mach_port_array_t, ... */
 #include <mach/mach_port.h>		/* mach_port_allocate, kern_return_t */
 #include <mach/message.h>		/* mach_msg, mach_msg_header_t, ... */
 #include <mach/task_special_ports.h>	/* task_get_bootstrap_port, ... */
