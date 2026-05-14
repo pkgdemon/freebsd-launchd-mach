@@ -35,9 +35,9 @@ FreeBSD-openssl-dev
 # headers are present at build time, then purged before mkuzip.
 FreeBSD-audit-dev
 
-# byacc + flex for migcom build (parser.y + lexxer.l). Both are
-# build-only — generated parser.c / lexxer.c get compiled in and the
-# tools are purged before mkuzip. Apple's bootstrap_cmds source ships
-# both as yacc/lex grammars.
-FreeBSD-byacc
-FreeBSD-flex
+# Note: byacc + flex for migcom (parser.y + lexxer.l grammars) are NOT
+# in separate pkgbase pkgs — they ship inside FreeBSD-toolchain (which
+# is already in this list above as the build toolchain). Verified via
+# `tar -tf FreeBSD-toolchain-*.pkg | grep -E 'yacc|lex|flex|byacc'`
+# returning /usr/bin/{yacc,byacc,lex,flex,flex++,lex++}. So no extra
+# pkg adds needed for the migcom build.
