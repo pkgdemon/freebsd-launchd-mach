@@ -23,11 +23,14 @@ WARNS?=		0		# vendored code; don't gate on style warnings
 # explicit dependency near the bottom of this Makefile).
 YFLAGS=		-d
 
+# Source list matches Apple's mig.xcodeproj "Sources" build phase
+# exactly. NB: handler.c is present in the repo but is NOT in Apple's
+# build phase — it's stale dead code (references removed MIG concepts
+# like IsCamelot / itLongForm / itDeallocate) and must not be compiled.
 SRCS=		parser.y \
 		lexxer.l \
 		error.c \
 		global.c \
-		handler.c \
 		header.c \
 		mig.c \
 		routine.c \
