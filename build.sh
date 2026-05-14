@@ -681,6 +681,7 @@ make -C "$ROOT/src/launchd/liblaunch" \
     DESTDIR="$WORK/rootfs" \
     PREFIX=/usr \
     MIGOUT="$MIG_OUT" \
+    SYSROOT="$WORK/rootfs" \
     all install
 ls -lh "$WORK/rootfs/usr/lib/libsystem/liblaunch.so" \
        "$WORK/rootfs/usr/lib/libsystem/liblaunch.so.1"

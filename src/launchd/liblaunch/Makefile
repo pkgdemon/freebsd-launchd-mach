@@ -34,6 +34,13 @@ SRCS=		liblaunch.c \
 # the MIG output.
 MIGOUT?=
 
+# SYSROOT — the in-build rootfs. Earlier build.sh steps install
+# headers there that liblaunch needs but that aren't FreeBSD-native:
+# <uuid/uuid.h> (libxpc shim), <dispatch/dispatch.h>, <xpc/*.h>,
+# <servers/bootstrap.h>, the <mach/mach.h> umbrella. build.sh passes
+# SYSROOT=$WORK/rootfs; unset on a bare standalone build.
+SYSROOT?=
+
 # Vendored Apple source — don't gate on its warnings.
 WARNS?=		0
 NO_MAN=		yes
@@ -44,6 +51,10 @@ CFLAGS+=	-I${.CURDIR}/../freebsd-shims	# libkern/, os/, libproc.h, ...
 CFLAGS+=	-I${.CURDIR}/../../libmach/include	# mach/*
 .if !empty(MIGOUT)
 CFLAGS+=	-I${MIGOUT}			# job.h, helper.h, helperServer.h
+.endif
+.if !empty(SYSROOT)
+CFLAGS+=	-I${SYSROOT}${PREFIX}/include	# uuid/, dispatch/, xpc/, servers/
+LDADD+=		-L${SYSROOT}${PREFIX}/lib/libsystem
 .endif
 
 # launchd-842 expects these Apple build-time defines (see xcconfigs in
