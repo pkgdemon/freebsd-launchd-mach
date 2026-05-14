@@ -37,6 +37,7 @@ SRCS=		xpc_dictionary.c \
 		xpc_connection.c \
 		subr_nvlist.c \
 		subr_nvpair.c \
+		msgio.c \
 		libbootstrap.c
 
 # SYSROOT — points at the in-build rootfs so we can find the headers
