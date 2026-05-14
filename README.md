@@ -269,7 +269,13 @@ into `rc.local` &mdash; its real home is a launchd-managed job
 once launchd is PID 1 (Phase J-ish). Until then it's ephemeral,
 started by the smoke harness and SIGKILL'd after.
 
-**Next (Phase H: libxpc port)** &mdash; all prerequisites in place:
+**Phase H (libxpc port)** &mdash; *done.* Forked ravynOS's
+`lib/libxpc/` into `src/libxpc/`, built against our libsystem_kernel
++ libdispatch + libbootstrap. Type-system surface
+(`xpc_dictionary_create`, `set_string`, `get_string`, `set_int64`,
+`get_int64`, `xpc_release`) round-trips in-process; smoke marker
+`LIBXPC-OK` fires alongside the prior 19 markers. Prerequisites that
+shipped first:
 
 | Capability | Phase | Marker |
 |---|---|---|
@@ -280,11 +286,15 @@ started by the smoke harness and SIGKILL'd after.
 | `host_set_special_port` + fallback | G2b | `HOST-BOOTSTRAP-OK` |
 | `bootstrap_check_in` / `bootstrap_look_up` + daemon | G1/G2c/G2d | `BOOTSTRAP-OK`, `BOOTSTRAP-REMOTE-OK` |
 
-Fork ravynOS's `lib/libxpc/` into this repo, build it against our
-libsystem_kernel + libdispatch + libbootstrap. ravynOS's libxpc
-uses exactly the Mach surface we've wired (verified via grep in
-the Phase D notes); no `dispatch_mach_t` channel API needed. Smoke
-marker: `LIBXPC-OK`.
+Local Apple-shim public headers (`<Availability.h>`, `<launch.h>`,
+`<uuid/uuid.h>`, `<sys/fileport.h>`) ship into `/usr/include` so
+external consumers (test binaries today, future launchd / configd)
+parse `<xpc/xpc.h>` without changes. Two XNU-only symbols
+(`fileport_make{port,fd}`, `vproc_transaction_{begin,end}`) are
+runtime stubs in `src/libxpc/stubs.c`; replace with real
+implementations when a real consumer needs them. libxpc.so links
+`-lsbuf` and `-lBlocksRuntime` so its DT_NEEDED entries cover the
+sbuf API and `-fblocks` runtime helpers it depends on.
 
 The high-level `dispatch_mach_t` channel API in libdispatch's
 `src/mach.c` (~3,250 LOC, gated on `HAVE_MACH`) is *not* on the
