@@ -498,17 +498,22 @@ echo "==> installing <mach/mach.h> umbrella header"
 cp "$ROOT/src/libmach/include/mach/mach.h" \
    "$WORK/rootfs/usr/include/mach/mach.h"
 
-# <uuid/uuid.h> shim — xpc/xpc.h includes <uuid/uuid.h> in its public
-# surface, so any consumer of installed /usr/include/xpc/xpc.h also
-# needs /usr/include/uuid/uuid.h on the search path. Inside libxpc's
-# own build the local sys/fileport.h-style shim is reachable via
-# -I${.CURDIR}, but external test/program builds (test_libxpc and the
-# future launchd / configd) only see /usr/include, so install the
-# same shim there. The shim just redirects to FreeBSD's <uuid.h>.
-echo "==> installing <uuid/uuid.h> shim"
+# Apple-shim headers — xpc/xpc.h, xpc/base.h, etc. transitively include
+# <uuid/uuid.h>, <Availability.h>, and <launch.h>. Inside libxpc's own
+# build these resolve via -I${.CURDIR}; external consumers
+# (test_libxpc and the future launchd / configd) only see
+# /usr/include, so install the same shims there.
+#   uuid/uuid.h   — redirect to FreeBSD's <uuid.h>
+#   Availability.h — expand Apple availability macros to nothing
+#   launch.h       — vendored ravynOS liblaunch public surface
+echo "==> installing Apple-shim public headers"
 mkdir -p "$WORK/rootfs/usr/include/uuid"
 cp "$ROOT/src/libxpc/uuid/uuid.h" \
    "$WORK/rootfs/usr/include/uuid/uuid.h"
+cp "$ROOT/src/libxpc/Availability.h" \
+   "$WORK/rootfs/usr/include/Availability.h"
+cp "$ROOT/src/libxpc/launch.h" \
+   "$WORK/rootfs/usr/include/launch.h"
 
 echo "==> building libxpc (src/libxpc)"
 mkdir -p "$WORK/rootfs/usr/include/xpc"
