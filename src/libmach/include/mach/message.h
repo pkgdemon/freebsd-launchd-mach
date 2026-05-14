@@ -11,6 +11,15 @@
 
 #include <stdint.h>		/* uint16_t for mach_msg_port_descriptor_t */
 #include <mach/mach_traps.h>	/* mach_port_name_t, MACH_PORT_NULL */
+#include <mach/std_types.h>	/* natural_t, integer_t, boolean_t, kern_return_t */
+				/* On Apple, <mach/message.h> pulls the
+				 * machine word types in transitively; we do
+				 * the same so Apple-source consumers (migcom,
+				 * MIG stubs, launchd-842) that include only
+				 * <mach/message.h> still see natural_t etc.
+				 * std_types.h's boolean_t / kern_return_t are
+				 * guarded, so the typedefs below this point
+				 * become no-ops — left in place for clarity. */
 
 #ifdef __cplusplus
 extern "C" {
