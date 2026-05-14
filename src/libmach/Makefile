@@ -43,7 +43,10 @@ INCS=		include/mach/mach_traps.h \
 		include/mach/boolean.h \
 		include/mach/kern_return.h \
 		include/mach/std_types.h \
-		include/mach/ndr.h
+		include/mach/ndr.h \
+		include/mach/machine.h \
+		include/mach/vm_map.h \
+		include/mach/clock_types.h
 INCSDIR=	${PREFIX}/include/mach
 LIBDIR=		${PREFIX}/lib/libsystem
 

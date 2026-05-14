@@ -12,6 +12,7 @@
 #define _MACH_VM_MAP_H_
 
 #include <stdint.h>
+#include <sys/types.h>		/* FreeBSD's vm_offset_t / vm_size_t */
 #include <mach/mach_traps.h>	/* mach_port_name_t */
 #include <mach/kern_return.h>	/* kern_return_t */
 #include <mach/std_types.h>	/* natural_t */
@@ -20,13 +21,17 @@
 extern "C" {
 #endif
 
-/* VM address / size types. Apple scales these to the address space;
- * on our 64-bit-only target they are flat uint64_t / unsigned long. */
-#ifndef _VM_TYPES_DEFINED
-#define _VM_TYPES_DEFINED
+/* FreeBSD's <sys/types.h> already provides vm_offset_t and vm_size_t
+ * (guarded by _VM_OFFSET_T_DECLARED / _VM_SIZE_T_DECLARED). We only
+ * add the Apple-specific names FreeBSD lacks: vm_address_t and the
+ * mach_vm_* 64-bit-wide variants. Each is individually guarded so a
+ * later real Mach VM header can take over without a clash. */
+#ifndef _VM_ADDRESS_T_DECLARED
+#define _VM_ADDRESS_T_DECLARED
 typedef unsigned long	vm_address_t;
-typedef unsigned long	vm_size_t;
-typedef unsigned long	vm_offset_t;
+#endif
+#ifndef _MACH_VM_TYPES_DECLARED
+#define _MACH_VM_TYPES_DECLARED
 typedef uint64_t	mach_vm_address_t;
 typedef uint64_t	mach_vm_size_t;
 typedef uint64_t	mach_vm_offset_t;

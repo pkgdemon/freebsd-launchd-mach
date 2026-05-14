@@ -18,5 +18,7 @@
 #include <mach/message.h>		/* mach_msg, mach_msg_header_t, ... */
 #include <mach/task_special_ports.h>	/* task_get_bootstrap_port, ... */
 #include <mach/host_special_ports.h>	/* host_set_special_port, HOST_BOOTSTRAP_PORT */
+#include <mach/machine.h>		/* cpu_type_t, cpu_subtype_t */
+#include <mach/vm_map.h>			/* vm_deallocate, mach_vm_address_t */
 
 #endif /* !_MACH_MACH_H_ */
