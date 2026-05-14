@@ -39,6 +39,12 @@ SRCS=		parser.y \
 # which lets the generated parser.c / lexxer.c find each other's headers.
 CFLAGS+=	-I${.CURDIR} -I${.OBJDIR}
 
+# migcom's sources #include <mach/{message,boolean,kern_return,std_types,
+# ndr}.h>. On FreeBSD those don't live in the host /usr/include — they're
+# our libmach headers. Point at the in-tree libmach include dir so the
+# host build resolves them without needing libmach installed first.
+CFLAGS+=	-I${.CURDIR}/../../libmach/include
+
 # Apple's Xcode build defines this; mig.c / mig_machine.h reference it for
 # bit-width selection. Default to 1 (matches macOS); irrelevant for our
 # launchd-842 use since we only target 64-bit.
