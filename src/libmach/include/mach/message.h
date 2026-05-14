@@ -303,10 +303,11 @@ mach_msg_receive(mach_msg_header_t *msg)
 }
 
 /*
- * kern_return_t — also lives in <mach/mach_port.h>, but message.h
- * needs it for mig_reply_error_t. <mach/mach_port.h> includes us, so
- * we can't pull in mach_port.h without a cycle. Define here with a
- * guard so mach_port.h's redefinition is suppressed when it follows.
+ * kern_return_t — also lives in <mach/mach_port.h> and
+ * <mach/kern_return.h>. message.h still defines it (guarded) because
+ * the trailer / message types above are written in terms of plain
+ * ints but consumers expect kern_return_t to be visible from
+ * <mach/message.h> alone.
  */
 #ifndef _KERN_RETURN_T_DEFINED
 #define _KERN_RETURN_T_DEFINED
@@ -314,17 +315,14 @@ typedef int kern_return_t;
 #endif
 
 /*
- * mig_reply_error_t — wire layout of a MIG-generated stub's reply on
- * the error path. libxpc inspects this in xpc_pipe_try_receive() to
- * decide whether to forward a reply or drop a "no reply" sentinel.
+ * mig_reply_error_t and the MIG_* error codes used to live here as a
+ * placeholder (with an `int NDR` stand-in field). They now have their
+ * canonical home in <mach/mig_errors.h>, where mig_reply_error_t
+ * carries the real `NDR_record_t NDR` field the MIG-generated stubs
+ * actually emit. Consumers that pulled mig_reply_error_t in via
+ * <mach/message.h> get it via the <mach/mach.h> umbrella, which now
+ * includes <mach/mig_errors.h>.
  */
-typedef struct {
-	mach_msg_header_t	Head;
-	int			NDR;	/* unused on FreeBSD — MIG NDR header */
-	kern_return_t		RetCode;
-} mig_reply_error_t;
-
-#define MIG_NO_REPLY		-305	/* matches Apple's mig_errors.h */
 
 #ifdef __cplusplus
 }
