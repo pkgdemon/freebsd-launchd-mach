@@ -56,15 +56,25 @@ typedef mig_stub_routine_t mig_routine_t;
 typedef mig_routine_t (*mig_server_routine_t)(mach_msg_header_t *InHeadP);
 typedef kern_return_t (*mig_impl_routine_t)(void);
 
-/* Per-routine descriptor inside a subsystem's routine table. */
-typedef struct mig_routine_descriptor {
+/*
+ * Per-routine descriptor inside a subsystem's routine table.
+ * migcom's server.c emits the table as `struct routine_descriptor
+ * routine[N]` and initializes each entry with six fields
+ * { impl_routine, stub_routine, argc, descr_count, arg_descr,
+ * max_reply_msg } — so the struct tag is the unprefixed
+ * `routine_descriptor` (matching Apple's <mach/mig.h>), not
+ * `mig_routine_descriptor`.
+ */
+struct routine_descriptor {
 	mig_impl_routine_t	impl_routine;	/* the actual handler */
 	mig_stub_routine_t	stub_routine;	/* the MIG-generated stub */
 	unsigned int		argc;		/* numeric arg count */
 	unsigned int		descr_count;	/* reply descriptor count */
 	void			*arg_descr;	/* arg type descriptors */
 	unsigned int		max_reply_msg;	/* max reply size */
-} mig_routine_descriptor;
+};
+typedef struct routine_descriptor *routine_descriptor_t;
+typedef struct routine_descriptor mig_routine_descriptor;
 typedef mig_routine_descriptor *mig_routine_descriptor_t;
 
 /* A MIG subsystem: a contiguous routine table covering message IDs

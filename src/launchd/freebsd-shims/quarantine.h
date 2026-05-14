@@ -15,6 +15,15 @@
 #include <sys/types.h>
 #include <stdio.h>
 
+/* Upper bound on a serialized quarantine blob. libvproc.c stack-
+ * allocates a char[QTN_SERIALIZED_DATA_MAX] before calling
+ * qtn_proc_to_data(). Apple's value; our qtn_proc_to_data stub
+ * returns "no data" so the buffer is never actually filled, but the
+ * array still needs a valid compile-time size. */
+#ifndef QTN_SERIALIZED_DATA_MAX
+#define QTN_SERIALIZED_DATA_MAX	4096
+#endif
+
 typedef struct _qtn_proc *qtn_proc_t;
 typedef struct _qtn_file *qtn_file_t;
 
