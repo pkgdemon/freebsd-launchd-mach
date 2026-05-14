@@ -50,7 +50,9 @@ INCS=		include/mach/mach_traps.h \
 		include/mach/port.h \
 		include/mach/notify.h \
 		include/mach/mach_types.h \
-		include/mach/mig_errors.h
+		include/mach/mig_errors.h \
+		include/mach/mig.h \
+		include/mach/thread_status.h
 INCSDIR=	${PREFIX}/include/mach
 LIBDIR=		${PREFIX}/lib/libsystem
 

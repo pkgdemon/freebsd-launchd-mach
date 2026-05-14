@@ -164,7 +164,7 @@ type thread_act_consume_ref_t = mach_port_move_send_t
 		 * mach/machine/???? (currently THREAD_STATE_MAX,
 		 * in mach/thread_state.h)
 		 */
-import <sys/mach/thread_status.h>;
+import <mach/thread_status.h>;
 #ifndef THREAD_STATE_MAX
 #define THREAD_STATE_MAX 32
 #endif
@@ -597,8 +597,8 @@ simport <sys/mach/ipc_mig.h>;	/* pick up kernel-specific MIG things */
 
 #endif /* KERNEL_SERVER */
 
-import <sys/mach/mig.h>;
-import <sys/mach/mach_types.h>;
+import <mach/mig.h>;
+import <mach/mach_types.h>;
 
 #endif	/* _MACH_MACH_TYPES_DEFS_ */
 
