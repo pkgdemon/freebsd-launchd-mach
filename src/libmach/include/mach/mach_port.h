@@ -46,12 +46,14 @@ typedef unsigned int mach_port_right_t;
 #define MACH_PORT_RIGHT_PORT_SET    ((mach_port_right_t)3)
 #define MACH_PORT_RIGHT_DEAD_NAME   ((mach_port_right_t)4)
 
-/* MACH_MSG_TYPE_* port-right dispositions now live in their Apple-
+/*
+ * MACH_MSG_TYPE_* port-right dispositions now live in their Apple-
  * canonical home, <mach/message.h> (which this header #includes
- * above). The full set — MOVE_*/COPY_*/MAKE_*, PORT_* aliases,
- * POLYMORPHIC — is declared there once; declaring them here too
- * caused duplicate-definition breakage when migcom pulled in only
- * <mach/message.h>. */
+ * above). The full set -- the MOVE / COPY / MAKE family, the PORT_
+ * abstract aliases, and POLYMORPHIC -- is declared there once.
+ * Declaring them here too caused duplicate-definition breakage when
+ * migcom pulled in only <mach/message.h>.
+ */
 
 kern_return_t mach_port_allocate(mach_port_name_t task,
     mach_port_right_t right, mach_port_name_t *name);
