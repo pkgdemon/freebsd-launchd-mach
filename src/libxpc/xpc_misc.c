@@ -34,7 +34,7 @@
 #include <assert.h>
 #include <syslog.h>
 #include <stdarg.h>
-#include <uuid.h>
+#include <uuid/uuid.h>
 
 #include "xpc_internal.h"
 
@@ -211,9 +211,8 @@ static void
 xpc_copy_description_level(xpc_object_t obj, struct sbuf *sbuf, int level)
 {
 	struct xpc_object *xo = obj;
-	struct uuid *id;
-	char *uuid_str;
-	uint32_t uuid_status;
+	const uint8_t *uuid_bytes;
+	char uuid_str[37];
 
 	if (obj == NULL) {
 		sbuf_printf(sbuf, "<null value>\n");
@@ -267,10 +266,11 @@ xpc_copy_description_level(xpc_object_t obj, struct sbuf *sbuf, int level)
 		break;	
 
 	case _XPC_TYPE_UUID:
-		id = (struct uuid *)xpc_uuid_get_bytes(obj);
-		uuid_to_string(id, &uuid_str, &uuid_status);
+		/* libuuid API: uuid_unparse formats into a caller buffer,
+		 * no malloc/free (unlike FreeBSD DCE uuid_to_string). */
+		uuid_bytes = xpc_uuid_get_bytes(obj);
+		uuid_unparse(uuid_bytes, uuid_str);
 		sbuf_printf(sbuf, "%s\n", uuid_str);
-		free(uuid_str);
 		break;
 
 	case _XPC_TYPE_ENDPOINT:

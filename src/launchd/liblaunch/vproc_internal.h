@@ -48,7 +48,16 @@ typedef mach_port_t vproc_mig_t;
 vproc_err_t _vprocmgr_init(const char *session_type);
 vproc_err_t _vproc_post_fork_ping(void);
 
-#if !TARGET_OS_EMBEDDED
+/*
+ * FreeBSD port: SYS_audit_session_self / SYS_audit_session_join are
+ * XNU-specific syscalls — they expose the audit session as a Mach
+ * port, a model FreeBSD's audit subsystem doesn't have. On FreeBSD
+ * we take the same path Apple's embedded target does: no audit
+ * session port (MACH_PORT_NULL) and join-is-a-no-op. The vproc_mig_*
+ * calls that take an audit session port just receive MACH_PORT_NULL,
+ * which launchd treats as "inherit the caller's session".
+ */
+#if !TARGET_OS_EMBEDDED && !defined(__FreeBSD__)
 #define _audit_session_self(v) (mach_port_t)syscall(SYS_audit_session_self)
 #define _audit_session_join(s) (au_asid_t)syscall(SYS_audit_session_join, session)
 #else

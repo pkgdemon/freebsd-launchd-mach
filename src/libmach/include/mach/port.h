@@ -29,6 +29,12 @@
 #define MACH_PORT_VALID(name) \
 	(((name) != MACH_PORT_NULL) && ((name) != MACH_PORT_DEAD))
 
+/* mach_port_array_t — an out-of-line array of port names, the shape
+ * MIG hands back from RPCs that return port lists (e.g. the launchd
+ * job interface's lookup_children). */
+typedef mach_port_t *mach_port_array_t;
+typedef mach_port_name_t *mach_port_name_array_t;
+
 /* mach_port_type_t — a bitmask describing which rights a name holds.
  * The MACH_PORT_RIGHT_* values come from <mach/mach_port.h>. */
 typedef natural_t mach_port_type_t;

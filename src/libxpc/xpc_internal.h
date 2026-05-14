@@ -38,7 +38,7 @@
  *   <bsm/audit.h>     — au_asid_t (BSM audit-session ID)
  *   <stdint.h>        — uint{8,16,32,64}_t / int64_t / uintptr_t
  *   <stdbool.h>       — bool
- *   <uuid.h>          — uuid_t (FreeBSD's, not libuuid's)
+ *   <uuid/uuid.h>     — uuid_t (libuuid array shape, our shim)
  *   <mach/mach.h>     — mach_port_t (and pulls in audit_token_t)
  *   <dispatch/dispatch.h> — dispatch_queue_t / dispatch_source_t
  *   <xpc/xpc.h>       — xpc_object_t / xpc_handler_t
@@ -48,7 +48,7 @@
 #include <bsm/audit.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <uuid.h>
+#include <uuid/uuid.h>
 #include <mach/mach.h>
 #include <dispatch/dispatch.h>
 #include <xpc/xpc.h>
