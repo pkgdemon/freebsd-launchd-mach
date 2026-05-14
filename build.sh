@@ -529,6 +529,25 @@ chroot "$WORK/rootfs" ldconfig -r | grep -q libxpc \
 echo "==> libxpc install verified"
 
 #
+# 3j. build test_libxpc — Phase H2 smoke check. Links libxpc.so so
+#     the in-process xpc_dictionary_* round-trip exercises the
+#     newly-installed library; rpath /usr/lib/libsystem matches the
+#     pattern used by test_libdispatch and friends.
+#
+echo "==> building test_libxpc"
+cc -I"$WORK/rootfs/usr/include" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libxpc" \
+   "$ROOT/src/libxpc-tests/test_libxpc.c" \
+   -lxpc -ldispatch -lsystem_kernel -lpthread
+
+chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libxpc \
+    | grep -q "libxpc.so.* => /usr/lib/libsystem/" \
+    || { echo "FAIL: ldd doesn't resolve test_libxpc to /usr/lib/libsystem/libxpc.so"; exit 1; }
+echo "==> test_libxpc built + ldd verified"
+
+#
 # 3z. purge build packages + clean pkg cache + tear down chroot.
 #     Runs LAST in the build phase, after every chroot-side build
 #     (libdispatch) has used cmake/ninja/clang. Build pkgs (cmake/ninja

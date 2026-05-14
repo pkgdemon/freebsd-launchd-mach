@@ -240,6 +240,17 @@ expect {
     }
     "LIBDISPATCH-MACH-OK" { puts "\nOK: libdispatch Mach RECV round-trip works" }
 }
+expect {
+    timeout {
+        puts "\nFAIL: LIBXPC marker not seen"
+        exit 1
+    }
+    "LIBXPC-FAIL" {
+        puts "\nFAIL: libxpc dictionary round-trip failed"
+        exit 1
+    }
+    "LIBXPC-OK" { puts "\nOK: libxpc dictionary round-trip works" }
+}
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns
 # halt -p into a clean shutdown rather than a reset loop).

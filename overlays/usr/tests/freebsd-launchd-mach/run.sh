@@ -204,4 +204,23 @@ else
     exit 1
 fi
 
+# 5. libxpc smoke (Phase H2): exercise xpc_dictionary type-system
+# in-process — create, set/get string + int64, release. Proves
+# libxpc.so links + its core type registry + nv-based serialization
+# work. Connection / bootstrap surface lands in a follow-up.
+if [ -x /usr/tests/freebsd-launchd-mach/test_libxpc ]; then
+    if /usr/tests/freebsd-launchd-mach/test_libxpc; then
+        echo "LIBXPC-OK: dictionary round-trip succeeded"
+    else
+        rc=$?
+        echo "LIBXPC-FAIL: test_libxpc exit=$rc"
+        echo "ldd:"
+        ldd /usr/tests/freebsd-launchd-mach/test_libxpc 2>&1 || true
+        exit 1
+    fi
+else
+    echo "LIBXPC-FAIL: test_libxpc binary not installed"
+    exit 1
+fi
+
 exit 0
