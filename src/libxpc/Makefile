@@ -62,6 +62,7 @@ INCS=		xpc/activity.h \
 		xpc/debug.h \
 		xpc/endpoint.h \
 		xpc/launchd.h \
+		xpc/private.h \
 		xpc/xpc.h
 INCSDIR=	${PREFIX}/include/xpc
 LIBDIR=		${PREFIX}/lib/libsystem
