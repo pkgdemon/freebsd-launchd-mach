@@ -53,7 +53,13 @@ INCS=		include/mach/mach_traps.h \
 		include/mach/mig_errors.h \
 		include/mach/mig.h \
 		include/mach/thread_status.h \
-		include/mach/mach_error.h
+		include/mach/mach_error.h \
+		include/mach/mach_interface.h \
+		include/mach/host_info.h \
+		include/mach/mach_host.h \
+		include/mach/mach_time.h \
+		include/mach/exception.h \
+		include/mach/host_reboot.h
 INCSDIR=	${PREFIX}/include/mach
 LIBDIR=		${PREFIX}/lib/libsystem
 
