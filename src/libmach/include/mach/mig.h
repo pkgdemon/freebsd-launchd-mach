@@ -65,12 +65,28 @@ typedef kern_return_t (*mig_impl_routine_t)(void);
  * `routine_descriptor` (matching Apple's <mach/mig.h>), not
  * `mig_routine_descriptor`.
  */
+/*
+ * Per-argument descriptor referenced from routine_descriptor::arg_descr.
+ * jobServer.c emits initializer expressions casting each descriptor
+ * to routine_arg_descriptor_t, so this struct must exist (Apple-
+ * canonical layout from <mach/mig.h>).
+ */
+struct routine_arg_descriptor {
+	mach_msg_type_name_t	type;		/* MIG type code */
+	uint32_t		size;		/* element size */
+	uint32_t		count;		/* element count */
+	uint32_t		flags;		/* RAD_* flags */
+	uint32_t		offset;		/* offset in message */
+};
+typedef struct routine_arg_descriptor	 routine_arg_descriptor;
+typedef struct routine_arg_descriptor	*routine_arg_descriptor_t;
+
 struct routine_descriptor {
 	mig_impl_routine_t	impl_routine;	/* the actual handler */
 	mig_stub_routine_t	stub_routine;	/* the MIG-generated stub */
 	unsigned int		argc;		/* numeric arg count */
 	unsigned int		descr_count;	/* reply descriptor count */
-	void			*arg_descr;	/* arg type descriptors */
+	routine_arg_descriptor_t arg_descr;	/* arg type descriptors */
 	unsigned int		max_reply_msg;	/* max reply size */
 };
 typedef struct routine_descriptor *routine_descriptor_t;
