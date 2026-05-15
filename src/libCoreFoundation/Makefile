@@ -121,6 +121,13 @@ NO_MAN=		yes
 
 CFLAGS+=	-I${.CURDIR}/include			# Public CF headers
 CFLAGS+=	-I${.CURDIR}/internalInclude		# Internal CF headers
+
+# Force-include the CF prefix header. Upstream's CMakeLists registers it
+# via target_precompile_headers(CoreFoundation PRIVATE ...); the prefix
+# defines CF_PRIVATE, DEPLOYMENT_RUNTIME_SWIFT, CF_INLINE, TARGET_OS_*,
+# the strlcpy/asprintf compat shims, etc., and only CFStringTransform.c
+# explicitly #includes it. Force-include is the bsd.lib.mk analogue.
+CFLAGS+=	-include ${.CURDIR}/internalInclude/CoreFoundation_Prefix.h
 .if !empty(SYSROOT)
 CFLAGS+=	-I${SYSROOT}/usr/include		# Block.h, dispatch/*, mach/*
 LDADD+=		-L${SYSROOT}/usr/lib/libsystem
