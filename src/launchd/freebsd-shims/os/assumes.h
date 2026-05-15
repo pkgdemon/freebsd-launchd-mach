@@ -27,7 +27,7 @@
  * exactly once.
  */
 #define os_assumes_zero(e) __extension__({ \
-	__typeof__(e) _r = (e); \
+	__typeof__((e) + 0L) _r = (e); \
 	if (_r != 0) { \
 		fprintf(stderr, "os_assumes_zero: %s != 0 at %s:%d\n", \
 		    #e, __FILE__, __LINE__); \
@@ -37,7 +37,7 @@
 
 /* os_assumes(e) — expect e to be true; return e either way. */
 #define os_assumes(e) __extension__({ \
-	__typeof__(e) _r = (e); \
+	__typeof__((e) + 0L) _r = (e); \
 	if (!_r) { \
 		fprintf(stderr, "os_assumes: %s is false at %s:%d\n", \
 		    #e, __FILE__, __LINE__); \
@@ -52,7 +52,7 @@
  * callers can still inspect the result (many do `... != -1`).
  */
 #define posix_assumes_zero(e) __extension__({ \
-	__typeof__(e) _r = (e); \
+	__typeof__((e) + 0L) _r = (e); \
 	if (_r == -1) { \
 		fprintf(stderr, "posix_assumes_zero: %s == -1 (errno %d) at %s:%d\n", \
 		    #e, errno, __FILE__, __LINE__); \
