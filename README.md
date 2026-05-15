@@ -1,10 +1,24 @@
 # freebsd-launchd-mach
 
 FreeBSD modernization project. The plan: bring Apple's better lower-level
-system services (Mach IPC, launchd, configd, notifyd, asl, libxpc) to
-FreeBSD as an out-of-tree kernel module + userland stack, while keeping
-GNUstep for the framework layer and FreeBSD ELF for the binary format.
-macOS compatibility is a bonus; the goal is a more modern FreeBSD.
+system services (Mach IPC, launchd, libxpc, libdispatch, configd,
+notifyd, asl, IPConfiguration, mDNSResponder, DiskArbitration) to
+FreeBSD as an out-of-tree kernel module + userland stack. FreeBSD ELF
+for the binary format throughout. macOS compatibility is a bonus; the
+goal is a more modern FreeBSD.
+
+**Scope:** this ISO ships the *system-services* layer only &mdash;
+`mach.ko` + libsystem_kernel + libdispatch + libxpc + liblaunch +
+launchd + libCoreFoundation (swift-corelibs) + the daemons built on
+top. **GNUstep is not on this ISO** &mdash; it's the framework/app
+layer that a separate gershwin desktop overlay (forked from this
+base) handles. Foundation/`NSXxx` consumers live in that overlay,
+not here. The `CoreFoundation` we ship is swift-corelibs-foundation's
+pure-C CF, used by `launchctl` / `configd` / `IPConfiguration` /
+`mDNSResponder` / etc. &mdash; all of which are pure-C-with-CF in
+Apple's upstream and remain so on FreeBSD. See the
+[launchctl CoreFoundation spike](https://pkgdemon.github.io/freebsd-launchctl-corefoundation-spike.html)
+for the full reasoning behind that choice.
 
 - **Plan:** <https://pkgdemon.github.io/freebsd-launchd-mach-plan.html>
 - **License:** [BSD-2-Clause](LICENSE) (with per-component Apache 2.0 /
@@ -353,14 +367,15 @@ Sub-phases:
   step that execs `/sbin/launchd` on a no-IPC CLI path (`launchd -h`
   or equivalent), checks for expected output, prints
   `LAUNCHD-BUILD-OK`. Closes out Phase I1c proper.
-- **I1e &mdash; `launchctl`** &mdash; *deferred until the
-  GNUstep + CoreFoundation stack lands.* `support/launchctl.c` is
-  4,549 LOC with 245 CoreFoundation calls plus
-  `<CoreFoundation/CFPriv.h>` and `<CoreFoundation/CFLogUtilities.h>`
-  SPI headers; tractable only once a real CF implementation is on
-  the system. See the next section.
+- **I1e &mdash; `launchctl`** &mdash; *pending; gated on
+  libCoreFoundation.* `support/launchctl.c` is 4,549 LOC of
+  CoreFoundation-using C. The
+  [launchctl CoreFoundation spike](https://pkgdemon.github.io/freebsd-launchctl-corefoundation-spike.html)
+  audits its needs (49 distinct CF function calls, 1 SPI symbol, 17
+  types, 25 constants) and the porting plan that follows it. See the
+  next section.
 
-## CoreFoundation pivot before `launchctl`
+## CoreFoundation for system services &mdash; swift-corelibs CF
 
 The launchd daemon itself uses **zero** CoreFoundation (audit
 2026-05-15: 0 `CF*` calls across `launchd.c` + `core.c` +
@@ -370,42 +385,49 @@ Any consumer that talks to launchd over Mach RPC &mdash; test
 programs, eventually `configd`, third-party daemons &mdash; can do
 so without a CF implementation.
 
-`launchctl` is the lone CF holdout. Rather than open the 4,549-LOC
-file with no CF implementation present (which would mean
-stub-patching at 245 call sites), the plan is to land a real
-CF/Foundation surface first:
+`launchctl` is the first CF-using binary on the roadmap. After
+auditing three candidate CoreFoundation implementations
+(`gnustep/libs-base`, `gnustep/libs-corebase`,
+`swiftlang/swift-corelibs-foundation` &mdash; see the
+[launchctl-corefoundation-spike](https://pkgdemon.github.io/freebsd-launchctl-corefoundation-spike.html)
+for the full evidence), the answer is:
 
-1. **libobjc2** &mdash; GNUstep's Objective-C runtime. Check whether
-   gershwin-developer already ships it; vendor from
-   `gnustep/libobjc2` if not.
-2. **gnustep-make** (`tools-make`) &mdash; the build system the
-   GNUstep libraries use.
-3. **gnustep-base** (`libs-base`) &mdash; Foundation classes
-   (`NSString`, `NSArray`, `NSDictionary`, `NSPropertyList`,
-   &hellip;). Not strictly required for `launchctl` (pure C), but the
-   natural pair for `libs-corebase` and a prerequisite for any
-   later Foundation-using daemon.
-4. **gnustep-corebase** (`libs-corebase`) &mdash; pure-C
-   CoreFoundation (`CFString`, `CFArray`, `CFDictionary`,
-   `CFPropertyList`, &hellip;). The primary CF dependency for
-   `launchctl`.
-5. **swift-corelibs-foundation side-by-side evaluation** &mdash;
-   after GNUstep lands, investigate adding swift-corelibs-foundation
-   alongside as a second CF provider, primarily for whatever SPI
-   surface (`CFPriv.h`, `CFLogUtilities.h`) `libs-corebase` doesn't
-   cover. Decide whether to ship it before opening `launchctl.c`.
+- **`libs-base`** contributes zero CF C surface (it's Foundation
+  NSXxx for Obj-C consumers). Not relevant to a pure-C CF client.
+- **`libs-corebase`** has the right shape (909 CF functions
+  defined) but its plist parser is stubbed: XML read returns NULL,
+  binary read is `#if 0`'d, binary write has an empty body. Fatal
+  for `launchctl`, which exists to load `.plist` job files.
+- **`swift-corelibs-foundation`**'s `Sources/CoreFoundation/`
+  ships 78 `.c` files with 915 distinct `CF*` function definitions
+  and a real Apple plist driver (XML + binary, read + write). Covers
+  48 of 49 functions `launchctl` calls (the 49th is replaced by a
+  two-line `CFReadStream` + `CFPropertyListCreateFromStream` swap).
+  Apache 2.0, actively maintained.
+
+**Decision: vendor swift-corelibs CoreFoundation as
+`src/libCoreFoundation/`, build with `DEPLOYMENT_RUNTIME_SWIFT=0`
+(skips the libswiftCore.so dep), install as
+`/usr/lib/libsystem/libCoreFoundation.so.6`.** Same install lane as
+liblaunch / libxpc / libdispatch / libsystem_kernel /
+libBlocksRuntime &mdash; the Apple-libsystem family this project
+ships.
+
+**GNUstep is not on this ISO.** Per the
+[launchctl spike](https://pkgdemon.github.io/freebsd-launchctl-corefoundation-spike.html),
+none of the launchd-adjacent system services (launchctl, configd,
+IPConfiguration, mDNSResponder, asl, notifyd, DiskArbitration) need
+Foundation/NS &mdash; they're all pure C with CF, by Apple's
+original design. libobjc2 + libgnustep-base + libgnustep-corebase
+remain on the broader roadmap for the gershwin desktop
+overlay/fork, on a parallel track that doesn't gate or block this
+ISO's system-services work.
 
 The companion
-[**`freebsd-libxpc-foundation-spike`**](https://pkgdemon.github.io/freebsd-libxpc-foundation-spike.html)
-sketches the larger picture: `libgnustep-base` alone covers every
-Foundation consumer, while `libgnustep-corebase` + a supplementary
-`libCFRuntime.so` (sourced from swift-corelibs-foundation's CF +
-CF-Lite-1153.18 Mach `.c` files) covers the CF-only consumers
-(`configd`, `SystemConfiguration`, `IPConfiguration`).
-
-After that stack is in place, **I1e (`launchctl`)** becomes a
-focused port against a real CF surface rather than a 245-stub patch
-job.
+[`freebsd-libxpc-foundation-spike`](https://pkgdemon.github.io/freebsd-libxpc-foundation-spike.html)
+is being rewritten to match this conclusion; the
+[launchctl-corefoundation-spike](https://pkgdemon.github.io/freebsd-launchctl-corefoundation-spike.html)
+is the current authoritative source while that update lands.
 
 After I1, an explicit checkpoint precedes any PID-1 work (Phase I2:
 core functionality &mdash; KeepAlive, WatchPaths, Sockets, &hellip;).
@@ -429,14 +451,18 @@ Plan docs:
 - [**`freebsd-libxpc-libdispatch-mach-spike`**](https://pkgdemon.github.io/freebsd-libxpc-libdispatch-mach-spike.html)
   &mdash; libdispatch Mach-backend design + vendoring + build
   integration story.
+- [**`freebsd-launchctl-corefoundation-spike`**](https://pkgdemon.github.io/freebsd-launchctl-corefoundation-spike.html)
+  &mdash; *current authoritative answer for the CoreFoundation question
+  on this ISO.* Audits launchctl's CF surface (49 functions + 1 SPI),
+  compares the three CF candidates, recommends swift-corelibs CoreFoundation
+  built with `DEPLOYMENT_RUNTIME_SWIFT=0`. Covers coexistence with
+  GNUstep + future Swift on the ISO (three CF lanes, one CF per binary).
 - [**`freebsd-libxpc-foundation-spike`**](https://pkgdemon.github.io/freebsd-libxpc-foundation-spike.html)
-  &mdash; companion spike. Concludes that libgnustep-base alone serves
-  every component that needs Foundation, libgnustep-corebase plus a new
-  supplementary `libCFRuntime.so` (sourced from swift-corelibs-foundation
-  CF + CF-Lite-1153.18 Mach .c files) covers the CoreFoundation needs of
-  configd / SystemConfiguration / IPConfiguration. Flags `NWNetworkAgentRegistration`
-  (private Apple Network.framework) as the one real Foundation-level
-  blocker for configd's IPMonitor plugin.
+  &mdash; older Foundation spike, written before the launchctl audit.
+  Being rewritten to match the launchctl-corefoundation-spike's
+  conclusion (swift-corelibs CF for system services, GNUstep for the
+  gershwin desktop overlay only). The newer spike supersedes its
+  recommendations.
 
 ## Build
 
