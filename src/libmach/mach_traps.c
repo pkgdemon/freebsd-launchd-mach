@@ -632,11 +632,16 @@ mach_port_set_context(mach_port_name_t task, mach_port_name_t name,
 }
 
 /*
- * audit_session_self / audit_session_join — Apple-shape decls in
- * FreeBSD's <bsm/audit.h>, but FreeBSD's libbsm doesn't actually
- * ship the implementations. Stub here in libsystem_kernel so the
- * link succeeds; runtime callers see MACH_PORT_NULL / AU_DEFAUDITSID.
+ * audit_session_self / audit_session_join — Apple-shape decls live
+ * in FreeBSD's <bsm/audit.h> but only behind __APPLE_API_PRIVATE,
+ * which libmach doesn't define. libbsm also doesn't ship the
+ * implementations. Re-state the prototypes here so libmach's
+ * -Wmissing-prototypes is satisfied and stub them so the link
+ * succeeds; runtime callers see MACH_PORT_NULL / AU_DEFAUDITSID.
  */
+mach_port_name_t audit_session_self(void);
+au_asid_t        audit_session_join(mach_port_name_t port);
+
 mach_port_name_t
 audit_session_self(void)
 {
@@ -664,6 +669,8 @@ host_set_UNDServer(host_t host, mach_port_t port)
  * callers can disable the negative-lookup cache around getpwnam
  * retries. launchd-842/core.c does `extern int gL1CacheEnabled;`
  * and assigns `false` before re-querying. FreeBSD's nsswitch has no
- * equivalent toggle, so the variable is purely a sink.
+ * equivalent toggle, so the variable is purely a sink. Carry an
+ * extern decl here too so -Wmissing-variable-declarations is happy.
  */
+extern int gL1CacheEnabled;
 int gL1CacheEnabled = 1;

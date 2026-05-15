@@ -44,7 +44,10 @@
  * MIG hands back from RPCs that return port lists (e.g. the launchd
  * job interface's lookup_children). */
 typedef mach_port_t *mach_port_array_t;
+#ifndef _MACH_PORT_NAME_ARRAY_T_
+#define _MACH_PORT_NAME_ARRAY_T_
 typedef mach_port_name_t *mach_port_name_array_t;
+#endif
 
 /* mach_port_type_t — a bitmask describing which rights a name holds.
  * The MACH_PORT_RIGHT_* values come from <mach/mach_port.h>. */

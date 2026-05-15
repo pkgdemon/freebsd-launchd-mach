@@ -25,4 +25,13 @@ si_search_module_set_flags(const char *name, uint32_t flags)
 	(void)flags;
 }
 
+/*
+ * gL1CacheEnabled — Apple's Libinfo exposes this `extern int` so
+ * callers can disable the negative-lookup cache around getpwnam
+ * retries. core.c does `extern int gL1CacheEnabled;` and assigns it.
+ * The sink lives in libsystem_kernel; declare it here so callers
+ * that include this header pick up the linkage.
+ */
+extern int gL1CacheEnabled;
+
 #endif /* _FREEBSD_SHIM_LIBINFO_H_ */

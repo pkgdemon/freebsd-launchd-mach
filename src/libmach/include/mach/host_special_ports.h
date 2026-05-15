@@ -24,6 +24,7 @@
 #include <mach/mach_traps.h>		/* mach_port_name_t */
 #include <mach/mach_port.h>		/* kern_return_t */
 #include <mach/message.h>		/* mach_port_t */
+#include <mach/mach_types.h>		/* host_t */
 
 #ifdef __cplusplus
 extern "C" {
