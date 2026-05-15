@@ -33,6 +33,19 @@ mach_port_name_t mach_host_self(void);
  */
 kern_return_t pid_for_task(mach_port_name_t task, int *pid);
 
+/*
+ * task_self_trap() — raw-syscall name for "give me my task port".
+ * Some Apple source uses this rather than mach_task_self().
+ */
+mach_port_name_t task_self_trap(void);
+
+/*
+ * task_name_for_pid() — open a task-name port (introspection-only)
+ * for a given pid. Stubbed; returns KERN_FAILURE.
+ */
+kern_return_t task_name_for_pid(mach_port_name_t target_task,
+    int pid, mach_port_name_t *t);
+
 #ifdef __cplusplus
 }
 #endif

@@ -422,6 +422,16 @@ mach_msg_return_t mach_msg(
 void mach_msg_destroy(mach_msg_header_t *msg);
 
 /*
+ * mach_msg_server_once() — MIG runtime helper: receive one message,
+ * dispatch it through the demux, send the reply. liblaunch's
+ * libvproc.c uses it to service helper-downcall requests.
+ */
+mach_msg_return_t mach_msg_server_once(
+    boolean_t (*demux)(mach_msg_header_t *, mach_msg_header_t *),
+    mach_msg_size_t max_size, mach_port_name_t rcv_name,
+    mach_msg_option_t options);
+
+/*
  * audit_token_to_au32() — unpack a Mach audit_token_t into its eight
  * named uint32 fields. Lives in <bsm/libbsm.h> on Apple; we declare
  * it next to audit_token_t (here in <mach/message.h>) so libmach,

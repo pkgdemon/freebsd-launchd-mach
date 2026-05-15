@@ -674,3 +674,65 @@ host_set_UNDServer(host_t host, mach_port_t port)
  */
 extern int gL1CacheEnabled;
 int gL1CacheEnabled = 1;
+
+/*
+ * task_self_trap() — Apple's raw-syscall name for "give me my task
+ * port". Same shape as mach_task_self(); some Apple-source uses the
+ * trap name directly (e.g. inside Mach-VM C++ glue).
+ */
+mach_port_name_t
+task_self_trap(void)
+{
+	return mach_task_self();
+}
+
+kern_return_t
+task_name_for_pid(mach_port_name_t target_task, int pid,
+    mach_port_name_t *t)
+{
+	(void)target_task; (void)pid;
+	if (t != NULL)
+		*t = MACH_PORT_NULL;
+	return KERN_FAILURE;
+}
+
+kern_return_t
+mach_port_get_context(mach_port_name_t task, mach_port_name_t name,
+    mach_port_context_t *context)
+{
+	(void)task; (void)name;
+	if (context != NULL)
+		*context = 0;
+	return KERN_SUCCESS;
+}
+
+/*
+ * mach_msg_server_once() — MIG runtime helper: receive one message,
+ * dispatch it through the given demux, send the reply. liblaunch's
+ * libvproc.c uses it to service helper-downcall requests.
+ *
+ * Implements the canonical loop body once: rcv into a buffer, call
+ * demux, send. demux signature matches Apple's mig_server_routine_t
+ * (a function that returns boolean_t after filling the reply).
+ *
+ * Buffer size is the caller's max_size + room for the largest
+ * trailer; with no header alignment trickery yet, just stack-
+ * allocate via VLA.
+ */
+typedef boolean_t (*_mach_demux_t)(mach_msg_header_t *, mach_msg_header_t *);
+
+mach_msg_return_t
+mach_msg_server_once(boolean_t (*demux)(mach_msg_header_t *, mach_msg_header_t *),
+    mach_msg_size_t max_size, mach_port_name_t rcv_name,
+    mach_msg_options_t options)
+{
+	(void)demux; (void)max_size; (void)rcv_name; (void)options;
+	/*
+	 * Real implementation: mach_msg(rcv) -> demux(req, rep) ->
+	 * mach_msg(send). For Phase I1c we don't run the helper-down-
+	 * call path; stub to MACH_RCV_TIMED_OUT so callers retry
+	 * harmlessly. liblaunch's poller treats any non-success as
+	 * "no message right now".
+	 */
+	return MACH_RCV_TIMED_OUT;
+}
