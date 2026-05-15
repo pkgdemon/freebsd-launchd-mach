@@ -65,6 +65,43 @@ kern_return_t mach_port_insert_right(mach_port_name_t task,
     mach_port_name_t name, mach_port_t poly,
     mach_msg_type_name_t polyPoly);
 
+/*
+ * mach_port_get_attributes() / set_attributes() flavor codes + their
+ * companion structs. launchd-842's core.c calls
+ * mach_port_set_attributes(.., MACH_PORT_LIMITS_INFO, ..) to raise a
+ * receive port's queue depth. Apple-canonical values.
+ */
+typedef integer_t	*mach_port_info_t;
+typedef int		mach_port_flavor_t;
+
+#define MACH_PORT_LIMITS_INFO		1
+#define MACH_PORT_RECEIVE_STATUS	2
+#define MACH_PORT_DNREQUESTS_SIZE	3
+
+struct mach_port_limits {
+	mach_port_msgcount_t	mpl_qlimit;	/* port queue depth */
+};
+typedef struct mach_port_limits	mach_port_limits_t;
+
+#define MACH_PORT_LIMITS_INFO_COUNT \
+	((mach_msg_type_number_t)(sizeof(mach_port_limits_t) / sizeof(integer_t)))
+
+/*
+ * mach_port_construct() option bits. MACH_PORT_TEMPOWNER is the only
+ * one launchd-842 references — it asks the kernel to transfer
+ * receive-right ownership on the next send, used for one-shot reply
+ * ports handed across task boundaries.
+ */
+#define MACH_PORT_TEMPOWNER	0x01
+
+kern_return_t mach_port_set_attributes(mach_port_name_t task,
+    mach_port_name_t name, mach_port_flavor_t flavor,
+    mach_port_info_t info, mach_msg_type_number_t infoCnt);
+
+kern_return_t mach_port_get_attributes(mach_port_name_t task,
+    mach_port_name_t name, mach_port_flavor_t flavor,
+    mach_port_info_t info, mach_msg_type_number_t *infoCnt);
+
 #ifdef __cplusplus
 }
 #endif

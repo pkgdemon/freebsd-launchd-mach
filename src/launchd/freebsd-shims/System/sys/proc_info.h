@@ -137,4 +137,22 @@ typedef void *rusage_info_t;
 #define RUSAGE_INFO_V0	0
 #define RUSAGE_INFO_V1	1
 
+/*
+ * Process status / flag constants. FreeBSD's <sys/proc.h> defines
+ * these too (SZOMB / P_SUGID / P_EXEC) but only inside _KERNEL —
+ * launchd-842 reads them in userland from proc_bsdshortinfo's
+ * pbsi_status / pbsi_flags. Values match FreeBSD's kernel headers so
+ * once proc_pidinfo() is backed by sysctl(KERN_PROC) the comparisons
+ * stay correct.
+ */
+#ifndef SZOMB
+#define SZOMB		5		/* awaiting parent collection */
+#endif
+#ifndef P_SUGID
+#define P_SUGID		0x00000100	/* has set-id privileges */
+#endif
+#ifndef P_EXEC
+#define P_EXEC		0x00004000	/* has called exec */
+#endif
+
 #endif /* _FREEBSD_SHIM_SYSTEM_SYS_PROC_INFO_H_ */

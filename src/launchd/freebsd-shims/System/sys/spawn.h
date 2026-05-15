@@ -46,6 +46,33 @@
 #define POSIX_SPAWN_JETSAM_USE_EFFECTIVE_PRIORITY	0x0800
 #endif
 
+/*
+ * Apple QoS tiers (latency + throughput). On macOS these live in
+ * <sys/qos.h>; launchd-842 references the "launch default" tiers
+ * from core.c for the job-spawn QoS attributes. FreeBSD has no QoS
+ * tier mechanism — values are placeholder, swallowed by the no-op
+ * posix_spawnattr_*_np() setters below.
+ */
+#ifndef LATENCY_QOS_TIER_UNSPECIFIED
+#define LATENCY_QOS_TIER_UNSPECIFIED		0x0
+#define LATENCY_QOS_TIER_0			((0xFF<<16) | 1)
+#define LATENCY_QOS_TIER_1			((0xFF<<16) | 2)
+#define LATENCY_QOS_TIER_2			((0xFF<<16) | 3)
+#define LATENCY_QOS_TIER_3			((0xFF<<16) | 4)
+#define LATENCY_QOS_TIER_4			((0xFF<<16) | 5)
+#define LATENCY_QOS_TIER_5			((0xFF<<16) | 6)
+#define LATENCY_QOS_LAUNCH_DEFAULT_TIER		LATENCY_QOS_TIER_3
+
+#define THROUGHPUT_QOS_TIER_UNSPECIFIED		0x0
+#define THROUGHPUT_QOS_TIER_0			((0xFE<<16) | 1)
+#define THROUGHPUT_QOS_TIER_1			((0xFE<<16) | 2)
+#define THROUGHPUT_QOS_TIER_2			((0xFE<<16) | 3)
+#define THROUGHPUT_QOS_TIER_3			((0xFE<<16) | 4)
+#define THROUGHPUT_QOS_TIER_4			((0xFE<<16) | 5)
+#define THROUGHPUT_QOS_TIER_5			((0xFE<<16) | 6)
+#define THROUGHPUT_QOS_LAUNCH_DEFAULT_TIER	THROUGHPUT_QOS_TIER_3
+#endif
+
 /* Apple process-type bands passed to posix_spawnattr_setprocesstype_np(). */
 #define POSIX_SPAWN_PROC_TYPE_APP_DEFAULT		0x00000001
 #define POSIX_SPAWN_PROC_TYPE_APP_TAL			0x00000002

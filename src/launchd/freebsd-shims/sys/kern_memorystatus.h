@@ -43,6 +43,7 @@
 #define JETSAM_PRIORITY_MAX			21
 #define JETSAM_PRIORITY_RESERVED		21
 #define JETSAM_PRIORITY_DEFAULT			18
+#define DEFAULT_JETSAM_PRIORITY			18
 
 /* memorystatus_control() commands. */
 #define MEMORYSTATUS_CMD_GET_PRIORITY_LIST		1
