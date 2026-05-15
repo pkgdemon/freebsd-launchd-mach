@@ -698,9 +698,10 @@ echo "==> Phase I1b: liblaunch built + installed"
 #     in-build rootfs (liblaunch / libxpc / libdispatch / libsystem_
 #     kernel + their headers).
 #
-#     Install: /usr/local/sbin/launchd — NOT /sbin. This is not PID 1
-#     yet; the I1c checkpoint only proves launchd compiles, links, and
-#     can exec the no-IPC CLI path.
+#     Install: /sbin/launchd — Apple-Unix path, matches the
+#     install-layout spike. PID-1 promotion is a separate later step;
+#     the binary location is the same whether init runs it or it IS
+#     init.
 #
 echo "==> Phase I1c: building launchd (src/launchd/src)"
 make -C "$ROOT/src/launchd/src" \
@@ -708,7 +709,7 @@ make -C "$ROOT/src/launchd/src" \
     MIGOUT="$MIG_OUT" \
     SYSROOT="$WORK/rootfs" \
     all install
-ls -lh "$WORK/rootfs/usr/local/sbin/launchd"
+ls -lh "$WORK/rootfs/sbin/launchd"
 echo "==> Phase I1c: launchd built + installed"
 
 #

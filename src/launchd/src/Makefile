@@ -6,10 +6,11 @@
 # the job / job_forward / job_reply / internal / helper / mach_exc /
 # notify subsystems.
 #
-# Naming: Apple ships /sbin/launchd as PID 1. We are NOT PID 1 yet —
-# this Phase I1c build only proves launchd compiles, links, and execs
-# the no-IPC CLI path (LAUNCHD-BUILD-OK marker). Installed at
-# /usr/local/sbin/launchd to stay clear of FreeBSD's /sbin/init.
+# Install path: /sbin/launchd, matching Apple and the project's
+# install-layout spike (freebsd-libxpc-install-layout-spike.html
+# section 7). PID-1 promotion is a separate, later step — the binary
+# at /sbin/launchd is the same whether it's started by init or runs
+# as init.
 #
 # Build:   cd src/launchd/src && make
 # Install: make DESTDIR=/path/to/rootfs install
@@ -90,6 +91,6 @@ CFLAGS+=	-fblocks			# libdispatch block syntax
 
 LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel -lpthread -lutil -lBlocksRuntime
 
-BINDIR=		/usr/local/sbin
+BINDIR=		/sbin
 
 .include <bsd.prog.mk>
