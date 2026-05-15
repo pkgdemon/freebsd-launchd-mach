@@ -60,7 +60,10 @@ typedef mach_port_type_t *mach_port_type_array_t;
 #define MACH_PORT_TYPE_DEAD_NAME	MACH_PORT_TYPE(MACH_PORT_RIGHT_DEAD_NAME)
 
 typedef natural_t mach_port_urefs_t;
+#ifndef _MACH_PORT_DELTA_T_
+#define _MACH_PORT_DELTA_T_
 typedef integer_t mach_port_delta_t;
+#endif
 #ifndef _MACH_PORT_SEQNO_T_
 #define _MACH_PORT_SEQNO_T_
 typedef natural_t mach_port_seqno_t;

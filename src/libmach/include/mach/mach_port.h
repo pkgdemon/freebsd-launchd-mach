@@ -104,6 +104,10 @@ typedef natural_t mach_port_seqno_t;
 #define _MACH_PORT_MSCOUNT_T_
 typedef natural_t mach_port_mscount_t;
 #endif
+#ifndef _MACH_PORT_DELTA_T_
+#define _MACH_PORT_DELTA_T_
+typedef integer_t mach_port_delta_t;
+#endif
 
 struct mach_port_limits {
 	mach_port_msgcount_t	mpl_qlimit;	/* port queue depth */
