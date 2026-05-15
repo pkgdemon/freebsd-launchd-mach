@@ -46,6 +46,22 @@ typedef uint64_t xpc_service_type_t;
 typedef char event_name_t[128];
 
 /*
+ * __RequestUnion__xpc_domain_xpc_domain_subsystem +
+ * __ReplyUnion__xpc_domain_xpc_domain_subsystem — MIG-generated
+ * unions Apple emits from a domain.defs Apple keeps in the SDK
+ * (usr/local/include/xpc/domain.defs). We don't ship it; runtime.c
+ * references the unions only inside a sizeof() to compute the
+ * launchd_runtime_init() max_msg_size buffer. A 4 KiB placeholder
+ * payload is more than enough headroom for any XPC-domain message.
+ */
+union __RequestUnion__xpc_domain_xpc_domain_subsystem {
+	char	_xpc_domain_req_pad[4096];
+};
+union __ReplyUnion__xpc_domain_xpc_domain_subsystem {
+	char	_xpc_domain_rep_pad[4096];
+};
+
+/*
  * xpc_jetsam_band_t — launchd's view of jetsam priority bands as seen
  * over XPC. Underlies the launchctl `setpriority` plumbing. Apple's
  * exact numbering is not load-bearing here.

@@ -61,4 +61,18 @@
 #define NOTE_ABSOLUTE		NOTE_ABSTIME
 #endif
 
+/*
+ * runtime.c's debug-printer FFLAGIF() decodes kqueue fflags into
+ * human-readable names. Define macOS-only notes (or notes FreeBSD
+ * gates behind __BSD_VISIBLE) as zero — the if (flags & X) probe
+ * never matches, so the name simply doesn't appear in the log line,
+ * which is the correct degraded behavior.
+ */
+#ifndef NOTE_REAP
+#define NOTE_REAP		0
+#endif
+#ifndef NOTE_SIGNAL
+#define NOTE_SIGNAL		0
+#endif
+
 #endif /* _FREEBSD_SHIM_SYS_EVENT_H_ */
