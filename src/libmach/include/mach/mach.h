@@ -23,5 +23,6 @@
 #include <mach/vm_map.h>			/* vm_deallocate, mach_vm_address_t */
 #include <mach/mig_errors.h>		/* mig_reply_error_t, MIG_NO_REPLY */
 #include <mach/mach_error.h>		/* mach_error_string */
+#include <mach/task_policy.h>		/* TASK_BASE_QOS_POLICY, task_policy_set */
 
 #endif /* !_MACH_MACH_H_ */

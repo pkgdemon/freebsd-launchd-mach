@@ -37,6 +37,15 @@ typedef int64_t  xpc_jetsam_band_t;
 typedef uint64_t xpc_service_type_t;
 
 /*
+ * event_name_t — fixed-size char array launchd-842 uses to carry
+ * service / event names across the XPC-domain RPCs. Apple's launchd
+ * relies on a 128-char buffer; core.c does
+ * `strlcpy(name, msi->name, sizeof(event_name_t))` so the array form
+ * (not a pointer) is required.
+ */
+typedef char event_name_t[128];
+
+/*
  * xpc_jetsam_band_t — launchd's view of jetsam priority bands as seen
  * over XPC. Underlies the launchctl `setpriority` plumbing. Apple's
  * exact numbering is not load-bearing here.
