@@ -48,14 +48,18 @@ SRCS=		launchd.c \
 
 # MIG-generated stubs. launchd is both client and server for the
 # job / internal / helper subsystems, server-only for mach_exc and
-# notify, and client-only for job_reply / job_forward — but the MIG
-# step emits both *User.c and *Server.c for every .defs, so just
-# compile them all. Unused stubs are dead code, not link conflicts.
+# notify, client-only for job_reply / job_forward. Apple's Xcode
+# project compiles only the side it uses for each .defs (see the
+# ATTRIBUTES in xcode-project.pbxproj.reference). We do the same:
+# job_replyServer.c is excluded because bootstrap_cmds-138's MIG
+# emits a broken server demux for reply-only subsystems (references
+# an unpacked `kr` variable that's never declared). The user-side
+# job_replyUser.c is what launchd actually uses to send back replies.
 .if !empty(MIGOUT)
 .PATH:		${MIGOUT}
 SRCS+=		jobUser.c jobServer.c \
 		job_forwardUser.c job_forwardServer.c \
-		job_replyUser.c job_replyServer.c \
+		job_replyUser.c \
 		internalUser.c internalServer.c \
 		helperUser.c helperServer.c \
 		mach_excUser.c mach_excServer.c \
