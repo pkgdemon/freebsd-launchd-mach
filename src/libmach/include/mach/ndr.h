@@ -32,4 +32,11 @@ typedef struct {
 #define NDR_CHAR_ASCII		0
 #define NDR_FLOAT_IEEE		0
 
+/*
+ * NDR_record — the singleton instance every MIG-generated client
+ * stub embeds in outgoing message headers. Defined once in
+ * libsystem_kernel (mach_traps.c), declared here for the stubs.
+ */
+extern NDR_record_t NDR_record;
+
 #endif /* !_MACH_NDR_H_ */

@@ -72,7 +72,17 @@ typedef struct {
 	mach_msg_size_t   msgh_size;
 	mach_port_t       msgh_remote_port;
 	mach_port_t       msgh_local_port;
-	mach_port_name_t  msgh_voucher_port;
+	/*
+	 * msgh_voucher_port (modern XNU) and msgh_reserved (older XNU,
+	 * pre-voucher) occupy the same 32-bit slot. MIG bootstrap_cmds-138
+	 * generates stubs that touch ->msgh_reserved; libdispatch /
+	 * libxpc clients use ->msgh_voucher_port. Anonymous union lets
+	 * both spellings address the same field.
+	 */
+	union {
+		mach_port_name_t	msgh_voucher_port;
+		mach_msg_size_t		msgh_reserved;
+	};
 	mach_msg_id_t     msgh_id;
 } mach_msg_header_t;
 
@@ -101,6 +111,7 @@ typedef struct {
 #define MACH_SEND_INVALID_TYPE		0x1000000f
 #define MACH_SEND_MSG_TOO_SMALL		0x10000008
 #define MACH_SEND_INTERRUPTED		0x10000007
+#define MACH_SEND_INVALID_HEADER	0x10000010
 
 #define MACH_RCV_IN_PROGRESS		0x10004001
 #define MACH_RCV_INVALID_NAME		0x10004002
@@ -337,6 +348,13 @@ typedef struct {
 	security_token_t		msgh_sender;
 	audit_token_t			msgh_audit;
 } mach_msg_audit_trailer_t;
+
+/*
+ * mach_msg_max_trailer_t — largest fixed trailer shape, used by MIG
+ * stubs to size receive buffers. The audit trailer is the largest
+ * we ship, so alias it under the canonical name.
+ */
+typedef mach_msg_audit_trailer_t mach_msg_max_trailer_t;
 
 /* Timeout sentinel for mach_msg(): wait forever. */
 #define MACH_MSG_TIMEOUT_NONE		((mach_msg_timeout_t)0)

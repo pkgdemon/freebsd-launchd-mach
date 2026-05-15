@@ -19,11 +19,30 @@
 #include <mach/mach_traps.h>
 #include <mach/mach_port.h>
 #include <mach/message.h>
+#include <mach/ndr.h>
 #include <mach/task_special_ports.h>
 #include <mach/host_special_ports.h>
 #include <mach/mach_traps_mux.h>
 
 #define	NO_SYSCALL	(-1)
+
+/*
+ * NDR_record — the per-process NDR sender-representation descriptor
+ * MIG-generated client stubs embed in every outgoing message. Apple
+ * keeps this in libsystem_kernel; we follow suit. Values are the
+ * canonical little-endian / ASCII / IEEE-float layout that matches
+ * amd64 FreeBSD.
+ */
+NDR_record_t NDR_record = {
+	.mig_vers      = 0,
+	.if_vers       = 0,
+	.reserved1     = 0,
+	.mig_encoding  = 0,
+	.int_rep       = NDR_INT_LITTLE,
+	.char_rep      = NDR_CHAR_ASCII,
+	.float_rep     = NDR_FLOAT_IEEE,
+	.reserved2     = 0,
+};
 
 /*
  * resolve_syscall — read sysctl mach.syscall.<name>, return the
