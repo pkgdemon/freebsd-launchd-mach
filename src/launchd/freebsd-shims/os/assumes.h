@@ -65,4 +65,14 @@
 #define os_assert_zero(e)	assert((e) == 0)
 #define posix_assert_zero(e)	assert((e) != -1)
 
+/*
+ * os_redirect_assumes(fn) — Apple's registration hook that tells the
+ * os_assumes_zero failure path to invoke fn() with a formatted error
+ * string. Our os_assumes_zero shim writes to stderr directly, so the
+ * registration is a no-op. The macro must still expand to a valid
+ * file-scope construct (Apple-source uses it like a top-level
+ * statement, with a trailing `;`).
+ */
+#define os_redirect_assumes(fn)	extern int _os_redirect_unused_for_##fn
+
 #endif /* !_OS_ASSUMES_H_SHIM_ */
