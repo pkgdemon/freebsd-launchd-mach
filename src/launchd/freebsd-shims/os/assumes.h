@@ -75,4 +75,20 @@
  */
 #define os_redirect_assumes(fn)	extern int _os_redirect_unused_for_##fn
 
+/*
+ * _ctx variants — Apple's os/assumes.h has context-carrying versions
+ * that thread a `ctx` cookie through the assumes-redirect callback.
+ * Our redirect is unused, so the cookie is dropped.
+ */
+#define os_assumes_ctx(ctx, e)		os_assumes(e)
+#define os_assumes_zero_ctx(ctx, e)	os_assumes_zero(e)
+#define posix_assumes_zero_ctx(ctx, e)	posix_assumes_zero(e)
+
+/*
+ * __OS_COMPILETIME_ASSERT__(e) — Apple's compile-time assert builtin
+ * used like `__OS_COMPILETIME_ASSERT__(sizeof(x) == 4);` at function
+ * scope. _Static_assert is the C11 equivalent.
+ */
+#define __OS_COMPILETIME_ASSERT__(e)	_Static_assert((e), #e)
+
 #endif /* !_OS_ASSUMES_H_SHIM_ */

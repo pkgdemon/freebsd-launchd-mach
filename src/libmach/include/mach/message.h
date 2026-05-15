@@ -185,6 +185,32 @@ typedef struct {
 	((remote) | ((local) << 8))
 
 /*
+ * MACH_MSGH_BITS_REMOTE / _LOCAL / _PORTS / _REPLY — unpack msgh_bits
+ * into its disposition fields. Apple-canonical masks.
+ */
+#define MACH_MSGH_BITS_REMOTE_MASK	0x000000ff
+#define MACH_MSGH_BITS_LOCAL_MASK	0x0000ff00
+#define MACH_MSGH_BITS_VOUCHER_MASK	0x001f0000
+
+#define MACH_MSGH_BITS_REMOTE(bits) \
+	((bits) & MACH_MSGH_BITS_REMOTE_MASK)
+#define MACH_MSGH_BITS_LOCAL(bits) \
+	(((bits) & MACH_MSGH_BITS_LOCAL_MASK) >> 8)
+#define MACH_MSGH_BITS_VOUCHER(bits) \
+	(((bits) & MACH_MSGH_BITS_VOUCHER_MASK) >> 16)
+#define MACH_MSGH_BITS_PORTS_MASK \
+	(MACH_MSGH_BITS_REMOTE_MASK | MACH_MSGH_BITS_LOCAL_MASK)
+#define MACH_MSGH_BITS_PORTS(bits) \
+	((bits) & MACH_MSGH_BITS_PORTS_MASK)
+
+/*
+ * MACH_MSGH_BITS_REPLY — flip remote/local for a reply message.
+ * MIG-server demux generates reply headers with this.
+ */
+#define MACH_MSGH_BITS_REPLY(bits) \
+	(MACH_MSGH_BITS_LOCAL(bits) | (MACH_MSGH_BITS_REMOTE(bits) << 8))
+
+/*
  * MACH_MSGH_BITS_COMPLEX — set on msgh_bits to signal that the message
  * body has descriptors (port references / OOL memory) after the header.
  * The kernel translates port descriptors between sender / receiver IPC

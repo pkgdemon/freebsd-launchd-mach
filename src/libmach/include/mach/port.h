@@ -29,6 +29,17 @@
 #define MACH_PORT_VALID(name) \
 	(((name) != MACH_PORT_NULL) && ((name) != MACH_PORT_DEAD))
 
+/*
+ * MACH_PORT_INDEX / MACH_PORT_GEN — split a mach_port_name_t into
+ * its kernel-table index and per-name generation counter. Apple's
+ * canonical layout: low 24 bits are the index, high 8 are the gen.
+ * launchd hashes ports by MACH_PORT_INDEX(name).
+ */
+#define MACH_PORT_INDEX(name)	((name) & ~0xff)
+#define MACH_PORT_GEN(name)	(((mach_port_name_t)(name)) & 0xff)
+#define MACH_PORT_MAKE(idx, gen) \
+	(((mach_port_name_t)(idx) & ~0xff) | ((mach_port_name_t)(gen) & 0xff))
+
 /* mach_port_array_t — an out-of-line array of port names, the shape
  * MIG hands back from RPCs that return port lists (e.g. the launchd
  * job interface's lookup_children). */

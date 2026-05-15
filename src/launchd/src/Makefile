@@ -87,7 +87,7 @@ LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
 CFLAGS+=	-D__APPLE_API_PRIVATE -DPRIVATE=1
 CFLAGS+=	-fblocks			# libdispatch block syntax
 
-LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel -lpthread
+LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel -lpthread -lutil
 
 BINDIR=		/usr/local/sbin
 

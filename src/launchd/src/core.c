@@ -22,6 +22,7 @@
 #include "helper.h"
 
 #include <TargetConditionals.h>
+#include <libkern/OSByteOrder.h>	/* OSSwapBigToHostInt64 — not pulled in transitively on FreeBSD */
 #include <mach/mach.h>
 #include <mach/mach_error.h>
 #include <mach/boolean.h>

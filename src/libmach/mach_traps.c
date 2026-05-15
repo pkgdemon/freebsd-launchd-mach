@@ -298,3 +298,232 @@ host_set_special_port(mach_port_name_t host, int which, mach_port_t port)
 	    (uint64_t)host, (uint64_t)which, (uint64_t)port,
 	    (uint64_t)0, (uint64_t)0));
 }
+
+/*
+ * Phase I1c link-stage stubs.
+ *
+ * launchd-842 references a large surface of Apple userland Mach
+ * APIs that we haven't ported yet. Until each gets a real backing
+ * (sysctl(KERN_PROC), real mach_port RPCs, kqueue-backed Mach msgs,
+ * libdispatch timing) the stubs let the launchd link succeed and
+ * the daemon's no-IPC CLI path runs. Calls that hit them at runtime
+ * fail closed (KERN_RESOURCE_SHORTAGE / -1 / no-op) — the daemon's
+ * existing graceful-degradation paths handle that.
+ */
+#include <time.h>
+#include <mach/exception.h>
+#include <mach/host_reboot.h>
+#include <mach/mach_host.h>
+#include <mach/mach_time.h>
+#include <mach/task_policy.h>
+
+uint64_t
+mach_absolute_time(void)
+{
+	struct timespec ts;
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+		return 0;
+	return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+
+uint64_t
+mach_continuous_time(void)
+{
+	return mach_absolute_time();
+}
+
+kern_return_t
+mach_timebase_info(mach_timebase_info_t info)
+{
+	if (info != NULL) {
+		info->numer = 1;
+		info->denom = 1;
+	}
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+host_info(host_t host, host_flavor_t flavor,
+    host_info_t info, mach_msg_type_number_t *count)
+{
+	(void)host; (void)flavor; (void)info;
+	if (count != NULL)
+		*count = 0;
+	return KERN_RESOURCE_SHORTAGE;
+}
+
+kern_return_t
+host_statistics(host_t host, host_flavor_t flavor,
+    host_info_t info, mach_msg_type_number_t *count)
+{
+	(void)host; (void)flavor; (void)info;
+	if (count != NULL)
+		*count = 0;
+	return KERN_RESOURCE_SHORTAGE;
+}
+
+kern_return_t
+host_reboot(host_priv_t host_priv, int options)
+{
+	(void)host_priv; (void)options;
+	return KERN_RESOURCE_SHORTAGE;
+}
+
+kern_return_t
+task_policy_set(task_t task, task_policy_flavor_t flavor,
+    task_policy_t policy_info, mach_msg_type_number_t count)
+{
+	(void)task; (void)flavor; (void)policy_info; (void)count;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+task_policy_get(task_t task, task_policy_flavor_t flavor,
+    task_policy_t policy_info, mach_msg_type_number_t *count,
+    boolean_t *get_default)
+{
+	(void)task; (void)flavor; (void)policy_info;
+	if (count != NULL)
+		*count = 0;
+	if (get_default != NULL)
+		*get_default = 0;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+task_set_exception_ports(task_t task, exception_mask_t mask,
+    mach_port_t new_port, exception_behavior_t behavior,
+    thread_state_flavor_t new_flavor)
+{
+	(void)task; (void)mask; (void)new_port;
+	(void)behavior; (void)new_flavor;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+host_set_exception_ports(host_priv_t host_priv, exception_mask_t mask,
+    mach_port_t new_port, exception_behavior_t behavior,
+    thread_state_flavor_t new_flavor)
+{
+	(void)host_priv; (void)mask; (void)new_port;
+	(void)behavior; (void)new_flavor;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+mach_port_set_attributes(mach_port_name_t task, mach_port_name_t name,
+    mach_port_flavor_t flavor, mach_port_info_t info,
+    mach_msg_type_number_t infoCnt)
+{
+	(void)task; (void)name; (void)flavor; (void)info; (void)infoCnt;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+mach_port_get_attributes(mach_port_name_t task, mach_port_name_t name,
+    mach_port_flavor_t flavor, mach_port_info_t info,
+    mach_msg_type_number_t *infoCnt)
+{
+	(void)task; (void)name; (void)flavor; (void)info;
+	if (infoCnt != NULL)
+		*infoCnt = 0;
+	return KERN_RESOURCE_SHORTAGE;
+}
+
+kern_return_t
+mach_port_mod_refs(mach_port_name_t task, mach_port_name_t name,
+    mach_port_right_t right, mach_port_delta_t delta)
+{
+	(void)task; (void)name; (void)right; (void)delta;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+mach_port_move_member(mach_port_name_t task, mach_port_name_t member,
+    mach_port_name_t after)
+{
+	(void)task; (void)member; (void)after;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+mach_port_request_notification(mach_port_name_t task,
+    mach_port_name_t name, mach_msg_id_t msgid,
+    mach_port_mscount_t sync, mach_port_t notify,
+    mach_msg_type_name_t notifyPoly, mach_port_t *previous)
+{
+	(void)task; (void)name; (void)msgid; (void)sync;
+	(void)notify; (void)notifyPoly;
+	if (previous != NULL)
+		*previous = 0;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+mach_port_extract_right(mach_port_name_t task, mach_port_name_t name,
+    mach_msg_type_name_t desired, mach_port_t *port,
+    mach_msg_type_name_t *acquired)
+{
+	(void)task; (void)name; (void)desired;
+	if (port != NULL)
+		*port = 0;
+	if (acquired != NULL)
+		*acquired = 0;
+	return KERN_RESOURCE_SHORTAGE;
+}
+
+kern_return_t
+mach_port_set_mscount(mach_port_name_t task, mach_port_name_t name,
+    mach_port_mscount_t mscount)
+{
+	(void)task; (void)name; (void)mscount;
+	return KERN_SUCCESS;
+}
+
+/*
+ * mach_msg_destroy() — clean up port rights / OOL memory in a
+ * message that won't be sent. Stub does nothing; the leaks are
+ * harmless on the no-IPC CLI path.
+ */
+#include <mach/message.h>
+void
+mach_msg_destroy(mach_msg_header_t *msg)
+{
+	(void)msg;
+}
+
+/*
+ * audit_token_to_au32() — unpack the 8-field audit token into named
+ * uint32 outs. The token layout is fixed (val[0..7]); on FreeBSD the
+ * mapping has slightly different semantics but the field arrangement
+ * is the same Apple uses, so this works.
+ */
+void
+audit_token_to_au32(audit_token_t atok,
+    uint32_t *auidp, uint32_t *euidp, uint32_t *egidp,
+    uint32_t *ruidp, uint32_t *rgidp, uint32_t *pidp,
+    uint32_t *asidp, uint32_t *tidp)
+{
+	if (auidp != NULL) *auidp = atok.val[0];
+	if (euidp != NULL) *euidp = atok.val[1];
+	if (egidp != NULL) *egidp = atok.val[2];
+	if (ruidp != NULL) *ruidp = atok.val[3];
+	if (rgidp != NULL) *rgidp = atok.val[4];
+	if (pidp  != NULL) *pidp  = atok.val[5];
+	if (asidp != NULL) *asidp = atok.val[6];
+	if (tidp  != NULL) *tidp  = atok.val[7];
+}
+
+/*
+ * pid_for_task() — map a task port to its pid. Apple-canonical.
+ * launchd uses it only on jobs it spawned, whose pid it already
+ * knows; the stub fails closed so callers take the "unknown" path.
+ */
+kern_return_t
+pid_for_task(mach_port_name_t task, int *pid)
+{
+	(void)task;
+	if (pid != NULL)
+		*pid = -1;
+	return KERN_FAILURE;
+}
