@@ -59,6 +59,7 @@
 #include <netinet/in_var.h>
 #include <netinet6/nd6.h>
 #include <bsm/libbsm.h>
+#include <bsm/audit_session.h>	/* FreeBSD: not pulled in transitively by libbsm.h */
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
