@@ -4,24 +4,132 @@
  * On Apple, <xpc/private.h> is the SPI half of libxpc — the bits not
  * in the public <xpc/xpc.h>. launchd-842's core.h includes it.
  *
- * Crucially, almost everything launchd reaches for under the
- * "xpc-private" banner — the xpc_domain_* / xpc_event_* /
- * xpc_process_* / _xpc_domain_* families — is *defined inside
- * launchd's own core.c*, not provided by libxpc. They're launchd's
- * MIG-handler implementations, forward-declared file-locally. So
- * <xpc/private.h> doesn't need to declare them.
+ * Almost everything launchd reaches for under the "xpc-private"
+ * banner — the xpc_domain_* / xpc_event_* / xpc_process_* /
+ * _xpc_domain_* function families — is *defined inside launchd's own
+ * core.c*, not provided by libxpc. They're launchd's MIG-handler
+ * implementations, forward-declared file-locally. So this header
+ * does NOT declare them.
  *
- * What core.h actually needs from this include is the base XPC type
- * vocabulary (xpc_object_t etc.) plus the launchd-facing libxpc API
- * (xpc_pipe_*, xpc_dictionary_get_audit_token, ...). Both already
- * live in our ported libxpc headers, so this header just re-exports
- * them. If a real xpc-private SPI turns out to be needed during the
- * launchd-daemon link (Phase I1c), it gets declared here then.
+ * What core.c actually needs from xpc-private and isn't already in
+ * libxpc's public xpc.h:
+ *   - launchd's internal XPC protocol vocabulary (routine opcodes,
+ *     dictionary key strings, the priority-band enum). These are
+ *     launchd-internal: no other consumer; values don't have to
+ *     match Apple, only stay consistent between launchd + launchctl.
+ *   - the xpc_service_type_t / xpc_jetsam_band_t typedefs.
+ *
+ * Phase I1c uses these only at compile time — the XPC IPC paths are
+ * not exercised by the no-IPC CLI smoke. Values are placeholder.
  */
 #ifndef _XPC_PRIVATE_H_
 #define _XPC_PRIVATE_H_
 
+#include <stdint.h>
+#include <mach/mach.h>		/* mach_port_t for xpc_dictionary_* hooks */
+
 #include <xpc/xpc.h>		/* xpc_object_t + the base XPC API */
 #include <xpc/launchd.h>	/* xpc_pipe_*, xpc_dictionary_get_audit_token, ... */
+
+/* ---- private type vocabulary ----------------------------------- */
+
+typedef int64_t  xpc_jetsam_band_t;
+typedef uint64_t xpc_service_type_t;
+
+/*
+ * xpc_jetsam_band_t — launchd's view of jetsam priority bands as seen
+ * over XPC. Underlies the launchctl `setpriority` plumbing. Apple's
+ * exact numbering is not load-bearing here.
+ */
+enum {
+	XPC_JETSAM_BAND_SUSPENDED = 1,
+	XPC_JETSAM_BAND_BACKGROUND_OPPORTUNISTIC,
+	XPC_JETSAM_BAND_BACKGROUND,
+	XPC_JETSAM_BAND_MAIL,
+	XPC_JETSAM_BAND_PHONE,
+	XPC_JETSAM_BAND_UI_SUPPORT,
+	XPC_JETSAM_BAND_FOREGROUND_SUPPORT,
+	XPC_JETSAM_BAND_FOREGROUND,
+	XPC_JETSAM_BAND_AUDIO,
+	XPC_JETSAM_BAND_ACCESSORY,
+	XPC_JETSAM_BAND_CRITICAL,
+	XPC_JETSAM_BAND_TELEPHONY,
+	XPC_JETSAM_BAND_LAST
+};
+
+#define XPC_JETSAM_PRIORITY_RESERVED	100
+
+/* ---- domain types ---------------------------------------------- */
+
+#define XPC_DOMAIN_TYPE_SYSTEM		1
+#define XPC_DOMAIN_TYPE_PERUSER		2
+#define XPC_DOMAIN_TYPE_PERSESSION	3
+
+/* ---- event-routine opcodes + keys ------------------------------ */
+
+#define XPC_EVENT_CHECK_IN		1
+#define XPC_EVENT_COPY			2
+#define XPC_EVENT_COPY_ENTITLEMENTS	3
+#define XPC_EVENT_GET_NAME		4
+#define XPC_EVENT_LOOK_UP		5
+#define XPC_EVENT_PROVIDER_CHECK_IN	6
+#define XPC_EVENT_PROVIDER_SET_STATE	7
+#define XPC_EVENT_SET			8
+
+#define XPC_EVENT_FLAG_ALLOW_UNMANAGED	0x1
+#define XPC_EVENT_FLAG_ENTITLEMENTS	0x2
+
+#define XPC_EVENT_ROUTINE_KEY_ENTITLEMENTS	"entitlements"
+#define XPC_EVENT_ROUTINE_KEY_ERROR		"error"
+#define XPC_EVENT_ROUTINE_KEY_EVENT		"event"
+#define XPC_EVENT_ROUTINE_KEY_EVENTS		"events"
+#define XPC_EVENT_ROUTINE_KEY_FLAGS		"flags"
+#define XPC_EVENT_ROUTINE_KEY_NAME		"name"
+#define XPC_EVENT_ROUTINE_KEY_OP		"op"
+#define XPC_EVENT_ROUTINE_KEY_PORT		"port"
+#define XPC_EVENT_ROUTINE_KEY_STATE		"state"
+#define XPC_EVENT_ROUTINE_KEY_STREAM		"stream"
+#define XPC_EVENT_ROUTINE_KEY_TOKEN		"token"
+
+/* ---- process-routine opcodes + keys ---------------------------- */
+
+#define XPC_PROCESS_JETSAM_SET_BAND		1
+#define XPC_PROCESS_JETSAM_SET_MEMORY_LIMIT	2
+#define XPC_PROCESS_SERVICE_ATTACH		3
+#define XPC_PROCESS_SERVICE_DETACH		4
+#define XPC_PROCESS_SERVICE_GET_PROPERTIES	5
+#define XPC_PROCESS_SERVICE_KILL		6
+
+#define XPC_PROCESS_ROUTINE_KEY_ARGV		"argv"
+#define XPC_PROCESS_ROUTINE_KEY_ERROR		"error"
+#define XPC_PROCESS_ROUTINE_KEY_HANDLE		"handle"
+#define XPC_PROCESS_ROUTINE_KEY_LABEL		"label"
+#define XPC_PROCESS_ROUTINE_KEY_MEMORY_LIMIT	"memory_limit"
+#define XPC_PROCESS_ROUTINE_KEY_NAME		"name"
+#define XPC_PROCESS_ROUTINE_KEY_NEW_INSTANCE_PORT "new_instance_port"
+#define XPC_PROCESS_ROUTINE_KEY_OP		"op"
+#define XPC_PROCESS_ROUTINE_KEY_PATH		"path"
+#define XPC_PROCESS_ROUTINE_KEY_PID		"pid"
+#define XPC_PROCESS_ROUTINE_KEY_PRIORITY_BAND	"priority_band"
+#define XPC_PROCESS_ROUTINE_KEY_RCDATA		"rcdata"
+#define XPC_PROCESS_ROUTINE_KEY_SIGNAL		"signal"
+#define XPC_PROCESS_ROUTINE_KEY_TYPE		"type"
+
+/* ---- service-type vocabulary ----------------------------------- */
+
+#define XPC_SERVICE_TYPE_APP			1
+#define XPC_SERVICE_TYPE_BUNDLED		2
+#define XPC_SERVICE_TYPE_LAUNCHD		3
+
+#define XPC_SERVICE_ENTITLEMENT_ATTACH		"com.apple.xpc.attach"
+#define XPC_SERVICE_ENV_ATTACHED		"XPC_SERVICE_ATTACHED"
+#define XPC_SERVICE_RENDEZVOUS_TOKEN		"XPC_SERVICE_RENDEZVOUS_TOKEN"
+
+/* ---- misc launchd-XPC dictionary keys -------------------------- */
+
+#define XPC_DOMAIN				"Domain"
+#define XPC_LABEL				"Label"
+#define XPC_SINGLETON				"Singleton"
+#define XPC_LPI_VERSION				1
 
 #endif /* !_XPC_PRIVATE_H_ */

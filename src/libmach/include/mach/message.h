@@ -83,10 +83,36 @@ typedef struct {
 #define MACH_SEND_TIMEOUT	0x00000010
 #define MACH_RCV_TIMEOUT	0x00000100
 
-/* Return codes we care about. Full set in sys/mach/message.h. */
-#define MACH_MSG_SUCCESS	0x00000000
-#define MACH_RCV_TIMED_OUT	0x10004003
-#define MACH_RCV_TOO_LARGE	0x10004004
+/*
+ * Return codes (mach_msg_return_t). Apple's canonical numbering —
+ * send-side errors live in 0x10000xxx, receive-side in 0x10004xxx.
+ * Full set in sys/mach/message.h.
+ */
+#define MACH_MSG_SUCCESS		0x00000000
+
+#define MACH_SEND_IN_PROGRESS		0x10000001
+#define MACH_SEND_INVALID_DATA		0x10000002
+#define MACH_SEND_INVALID_DEST		0x10000003
+#define MACH_SEND_TIMED_OUT		0x10000004
+#define MACH_SEND_INVALID_NOTIFY	0x10000005
+#define MACH_SEND_INVALID_REPLY		0x10000009
+#define MACH_SEND_INVALID_RIGHT		0x1000000a
+#define MACH_SEND_INVALID_TYPE		0x1000000f
+#define MACH_SEND_MSG_TOO_SMALL		0x10000008
+#define MACH_SEND_INTERRUPTED		0x10000007
+
+#define MACH_RCV_IN_PROGRESS		0x10004001
+#define MACH_RCV_INVALID_NAME		0x10004002
+#define MACH_RCV_TIMED_OUT		0x10004003
+#define MACH_RCV_TOO_LARGE		0x10004004
+#define MACH_RCV_INTERRUPTED		0x10004005
+#define MACH_RCV_PORT_CHANGED		0x10004006
+#define MACH_RCV_INVALID_NOTIFY		0x10004007
+#define MACH_RCV_INVALID_DATA		0x10004008
+#define MACH_RCV_PORT_DIED		0x10004009
+#define MACH_RCV_HEADER_ERROR		0x1000400b
+#define MACH_RCV_BODY_ERROR		0x1000400c
+#define MACH_RCV_INVALID_TYPE		0x1000400d
 
 /*
  * MACH_MSG_TYPE_* — port-right disposition values used in msgh_bits and

@@ -16,9 +16,22 @@
 #include <mach/mach_types.h>	/* task_t, host_priv_t, mach_port_t, kern_return_t */
 #include <mach/thread_status.h>	/* thread_state_flavor_t */
 
+#include <stdint.h>
+
 typedef int		exception_type_t;
 typedef int		exception_behavior_t;
 typedef unsigned int	exception_mask_t;
+
+/*
+ * mach_exception_data_t — variable-length array of int64_t exception
+ * codes. mach_exc.defs declares this as `array[*:2] of int64_t`; the
+ * MIG-generated mach_excServer.h references the C typedef. Apple
+ * defines it as a pointer-to-int64_t in <mach/exception_types.h>.
+ */
+typedef int64_t			mach_exception_data_type_t;
+typedef mach_exception_data_type_t *mach_exception_data_t;
+typedef mach_exception_data_type_t  mach_exception_code_t;
+typedef mach_exception_data_type_t  mach_exception_subcode_t;
 
 /* Exception types. */
 #define EXC_BAD_ACCESS		1
