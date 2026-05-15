@@ -14,11 +14,16 @@
  * port against MACH_PORT_NULL and treats errno == ENOSYS from
  * audit_session_port() as "no per-session port, carry on".
  *
- * NB: FreeBSD's base <bsm/audit.h> already *declares* (non-static)
- * audit_session_self() and audit_session_join(), plus AU_ASSIGN_ASID
- * / AU_DEFAUDITSID — so this shim must not redefine those. It only
- * supplies the entry points FreeBSD's audit.h omits:
- * _audit_session_self(), audit_session_port(), AU_SESSION_FLAG_*.
+ * NB: this shim must not redefine entry points already provided
+ * elsewhere on the FreeBSD port:
+ *   - FreeBSD's base <bsm/audit.h> declares (non-static)
+ *     audit_session_self() / audit_session_join() and defines
+ *     AU_ASSIGN_ASID / AU_DEFAUDITSID.
+ *   - liblaunch's vproc_internal.h (FreeBSD-patched) already #defines
+ *     _audit_session_self() / _audit_session_join() to MACH_PORT_NULL
+ *     / 0 no-op macros.
+ * So this shim supplies only what is otherwise missing:
+ * audit_session_port() and AU_SESSION_FLAG_IS_INITIAL.
  */
 #ifndef _FREEBSD_SHIM_BSM_AUDIT_SESSION_H_
 #define _FREEBSD_SHIM_BSM_AUDIT_SESSION_H_
@@ -31,15 +36,10 @@
 #define AU_SESSION_FLAG_IS_INITIAL	0x0001
 #endif
 
-static __inline mach_port_t
-_audit_session_self(void)
-{
-	return MACH_PORT_NULL;
-}
-
 static __inline int
-audit_session_port(au_asid_t asid __unused, mach_port_t *port)
+audit_session_port(au_asid_t asid, mach_port_t *port)
 {
+	(void)asid;
 	if (port != NULL) {
 		*port = MACH_PORT_NULL;
 	}
