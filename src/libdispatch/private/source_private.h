@@ -32,6 +32,20 @@
 #include <dispatch/base.h> // for HeaderDoc
 #endif
 
+/*
+ * freebsd-launchd-mach patch (2026-05-15): on macOS the umbrella headers
+ * pull <mach/mach.h> in for us; on FreeBSD/Mach the consumer (CFInternal.h
+ * via <dispatch/private.h>) doesn't, so the mach_msg_header_t /
+ * mach_msg_return_t / mach_port_t references in the Mach-typed block
+ * below are unresolved. The __has_include guard already establishes that
+ * Mach is available, so we pull the types in here — at the top of the
+ * file, outside DISPATCH_ASSUME_NONNULL_BEGIN, since clang forbids
+ * #include inside the assume_nonnull region.
+ */
+#if __has_include(<mach/mach.h>)
+#include <mach/mach.h>
+#endif
+
 DISPATCH_ASSUME_NONNULL_BEGIN
 
 __BEGIN_DECLS
@@ -561,15 +575,6 @@ void
 dispatch_source_cancel_and_wait(dispatch_source_t source);
 
 #if __has_include(<mach/mach.h>)
-/*
- * freebsd-launchd-mach patch (2026-05-15): on macOS the umbrella headers
- * pull <mach/mach.h> in for us; on FreeBSD/Mach the consumer (CFInternal.h
- * via <dispatch/private.h>) doesn't, so the mach_msg_header_t /
- * mach_msg_return_t / mach_port_t references below are unresolved. The
- * __has_include guard above already establishes that Mach is available,
- * so it's safe to satisfy the contract here.
- */
-#include <mach/mach.h>
 /*!
  * @typedef dispatch_mig_callback_t
  *
