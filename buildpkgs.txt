@@ -1,12 +1,9 @@
 # One pkg per line; lines starting with # are ignored.
-# Build-only packages — installed in the chroot to compile the
-# gershwin system-domain libraries (libdispatch + GNUstep stack), then
-# purged before the slim/mkuzip pass so they don't ship in the ISO.
+# Build-only packages — installed in the chroot to compile our
+# vendored sources (libdispatch via cmake), then purged before the
+# slim/mkuzip pass so they don't ship in the ISO.
 cmake
 ninja
-gmake
-autoconf
-libtool
-# libs-base configure uses pkg-config (pkgconf on FreeBSD) to discover
-# ICU's CFLAGS/LDFLAGS via icu-i18n.pc / icu-uc.pc.
+# CMake's find_package module-mode probes use pkg-config under the
+# hood — keep pkgconf so libdispatch's cmake discovery works.
 pkgconf
