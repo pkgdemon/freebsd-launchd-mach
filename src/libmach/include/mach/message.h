@@ -29,6 +29,7 @@ typedef unsigned int mach_msg_bits_t;
 typedef unsigned int mach_msg_size_t;
 typedef int          mach_msg_id_t;
 typedef unsigned int mach_msg_option_t;
+typedef mach_msg_option_t mach_msg_options_t;	/* Apple-source alias */
 typedef unsigned int mach_msg_timeout_t;
 typedef int          mach_msg_return_t;
 typedef mach_port_name_t mach_port_t;

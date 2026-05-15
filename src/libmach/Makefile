@@ -59,7 +59,8 @@ INCS=		include/mach/mach_traps.h \
 		include/mach/mach_host.h \
 		include/mach/mach_time.h \
 		include/mach/exception.h \
-		include/mach/host_reboot.h
+		include/mach/host_reboot.h \
+		include/mach/task_policy.h
 INCSDIR=	${PREFIX}/include/mach
 LIBDIR=		${PREFIX}/lib/libsystem
 

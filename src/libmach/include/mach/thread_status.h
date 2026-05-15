@@ -32,4 +32,17 @@ typedef natural_t		thread_state_data_t[THREAD_STATE_MAX];
 typedef int			thread_state_flavor_t;
 typedef thread_state_flavor_t	*thread_state_flavor_array_t;
 
+/*
+ * Per-arch flavor constants. launchd-842's core.c picks one based on
+ * the host architecture to pass to task_set_exception_ports(). On
+ * Apple they live in <mach/i386/thread_status.h> and
+ * <mach/arm/thread_status.h>; here the flavor numbers are enough —
+ * we don't transfer register state.
+ */
+#define x86_THREAD_STATE		7
+#define x86_THREAD_STATE32		1
+#define x86_THREAD_STATE64		4
+#define ARM_THREAD_STATE		1
+#define ARM_THREAD_STATE64		6
+
 #endif /* !_MACH_THREAD_STATUS_H_ */

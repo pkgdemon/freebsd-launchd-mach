@@ -38,6 +38,10 @@ typedef unsigned int mach_port_right_t;
 #define KERN_FAILURE              5
 #define KERN_RESOURCE_SHORTAGE    6
 #define KERN_INVALID_TASK         16	/* matches <sys/mach/kern_return.h> */
+#define KERN_INVALID_RIGHT        17
+#define KERN_INVALID_NAME         15
+#define KERN_INVALID_VALUE        18
+#define KERN_NO_SPACE             3
 
 /* mach_port_right_t values (matches <sys/mach/port.h>). */
 #define MACH_PORT_RIGHT_SEND        ((mach_port_right_t)0)
@@ -79,19 +83,54 @@ typedef int		mach_port_flavor_t;
 #define MACH_PORT_DNREQUESTS_SIZE	3
 
 /*
- * mach_port_msgcount_t lives in <mach/port.h>, which includes us — so
- * we can't pull port.h back in without a cycle. Typedef-locally with
- * a guard matching the one we'd want port.h to add.
+ * Port-vocabulary typedefs that live in <mach/port.h> on Apple, but
+ * port.h includes us — so re-declaring them here behind shared
+ * guards avoids a cycle while letting mach_port.h's structs (below)
+ * compile standalone.
  */
 #ifndef _MACH_PORT_MSGCOUNT_T_
 #define _MACH_PORT_MSGCOUNT_T_
 typedef natural_t mach_port_msgcount_t;
+#endif
+#ifndef _MACH_PORT_RIGHTS_T_
+#define _MACH_PORT_RIGHTS_T_
+typedef natural_t mach_port_rights_t;
+#endif
+#ifndef _MACH_PORT_SEQNO_T_
+#define _MACH_PORT_SEQNO_T_
+typedef natural_t mach_port_seqno_t;
+#endif
+#ifndef _MACH_PORT_MSCOUNT_T_
+#define _MACH_PORT_MSCOUNT_T_
+typedef natural_t mach_port_mscount_t;
 #endif
 
 struct mach_port_limits {
 	mach_port_msgcount_t	mpl_qlimit;	/* port queue depth */
 };
 typedef struct mach_port_limits	mach_port_limits_t;
+
+/*
+ * struct mach_port_status — receive-side port introspection. Apple's
+ * canonical layout; launchd-842 reads mps_msgcount to gauge queue
+ * pressure on its bootstrap ports.
+ */
+struct mach_port_status {
+	mach_port_rights_t	mps_pset;
+	mach_port_seqno_t	mps_seqno;
+	mach_port_mscount_t	mps_mscount;
+	mach_port_msgcount_t	mps_qlimit;
+	mach_port_msgcount_t	mps_msgcount;
+	mach_port_rights_t	mps_sorights;
+	boolean_t		mps_srights;
+	boolean_t		mps_pdrequest;
+	boolean_t		mps_nsrequest;
+	natural_t		mps_flags;
+};
+typedef struct mach_port_status	mach_port_status_t;
+
+#define MACH_PORT_RECEIVE_STATUS_COUNT \
+	((mach_msg_type_number_t)(sizeof(mach_port_status_t) / sizeof(natural_t)))
 
 #define MACH_PORT_LIMITS_INFO_COUNT \
 	((mach_msg_type_number_t)(sizeof(mach_port_limits_t) / sizeof(integer_t)))

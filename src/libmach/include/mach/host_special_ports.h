@@ -35,6 +35,15 @@ extern "C" {
 #define HOST_IO_MASTER_PORT		3
 #define HOST_BOOTSTRAP_PORT		13	/* freebsd-launchd-mach */
 
+/*
+ * Upper bound on a host-special-port `which` value. launchd uses it
+ * to validate ports it's asked to set as host-special. Apple's value
+ * is the kernel-internal high-water mark; we leave headroom past
+ * HOST_BOOTSTRAP_PORT for any future slots.
+ */
+#define HOST_MAX_SPECIAL_KERNEL_PORT	16
+#define HOST_MAX_SPECIAL_PORT		31
+
 kern_return_t host_set_special_port(mach_port_name_t host,
     int which, mach_port_t port);
 

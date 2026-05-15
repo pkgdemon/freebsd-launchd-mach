@@ -53,4 +53,12 @@
 #define EVFILT_MACHPORT		(-14)
 #endif
 
+/*
+ * EVFILT_TIMER's NOTE_ABSOLUTE on macOS is NOTE_ABSTIME on FreeBSD —
+ * launchd-842 uses the macOS spelling.
+ */
+#ifndef NOTE_ABSOLUTE
+#define NOTE_ABSOLUTE		NOTE_ABSTIME
+#endif
+
 #endif /* _FREEBSD_SHIM_SYS_EVENT_H_ */

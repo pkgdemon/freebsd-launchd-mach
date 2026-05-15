@@ -50,12 +50,21 @@ typedef mach_port_type_t *mach_port_type_array_t;
 
 typedef natural_t mach_port_urefs_t;
 typedef integer_t mach_port_delta_t;
+#ifndef _MACH_PORT_SEQNO_T_
+#define _MACH_PORT_SEQNO_T_
 typedef natural_t mach_port_seqno_t;
+#endif
+#ifndef _MACH_PORT_MSCOUNT_T_
+#define _MACH_PORT_MSCOUNT_T_
 typedef natural_t mach_port_mscount_t;
+#endif
 #ifndef _MACH_PORT_MSGCOUNT_T_
 #define _MACH_PORT_MSGCOUNT_T_
 typedef natural_t mach_port_msgcount_t;
 #endif
+#ifndef _MACH_PORT_RIGHTS_T_
+#define _MACH_PORT_RIGHTS_T_
 typedef natural_t mach_port_rights_t;
+#endif
 
 #endif /* !_MACH_PORT_H_ */

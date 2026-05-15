@@ -27,6 +27,25 @@
 typedef struct _qtn_proc *qtn_proc_t;
 typedef struct _qtn_file *qtn_file_t;
 
+/*
+ * qtn_proc_alloc() — Apple's allocator for a per-process quarantine
+ * handle (later filled via qtn_proc_init_with_*() and serialized via
+ * qtn_proc_to_data()). FreeBSD has no Gatekeeper; the stub returns
+ * NULL so launchd's `if (job_assumes(j, qp = qtn_proc_alloc()))`
+ * check takes the "no quarantine" branch.
+ */
+static __inline qtn_proc_t
+qtn_proc_alloc(void)
+{
+	return (qtn_proc_t)0;
+}
+
+static __inline void
+qtn_proc_free(qtn_proc_t proc)
+{
+	(void)proc;
+}
+
 static __inline int
 qtn_proc_to_data(qtn_proc_t proc, void *buf, size_t *buflen)
 {
