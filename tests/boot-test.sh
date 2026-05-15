@@ -273,6 +273,17 @@ expect {
     }
     "LAUNCHD-BUILD-OK" { puts "\nOK: /sbin/launchd execs + rejects non-PID-1" }
 }
+expect {
+    timeout {
+        puts "\nFAIL: COREFOUNDATION marker not seen"
+        exit 1
+    }
+    "COREFOUNDATION-FAIL" {
+        puts "\nFAIL: libCoreFoundation smoke test failed"
+        exit 1
+    }
+    "COREFOUNDATION-OK" { puts "\nOK: libCoreFoundation CFDictionary + plist round-trip works" }
+}
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns
 # halt -p into a clean shutdown rather than a reset loop).

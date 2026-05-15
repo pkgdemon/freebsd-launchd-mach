@@ -272,4 +272,21 @@ else
     exit 1
 fi
 
+# 8. libCoreFoundation — swift-corelibs CF, non-Swift mode. Exercise
+# CFDictionary + CFString + CFPropertyList XML/binary round-trip to
+# confirm the legacy refcount path is alive and the plist driver works.
+if [ -x /usr/tests/freebsd-launchd-mach/test_corefoundation ]; then
+    if /usr/tests/freebsd-launchd-mach/test_corefoundation; then
+        echo "COREFOUNDATION-OK: CFDictionary + plist round-trip succeeded"
+    else
+        rc=$?
+        echo "COREFOUNDATION-FAIL: test_corefoundation exit=$rc"
+        ldd /usr/tests/freebsd-launchd-mach/test_corefoundation 2>&1 || true
+        exit 1
+    fi
+else
+    echo "COREFOUNDATION-FAIL: test_corefoundation binary not installed"
+    exit 1
+fi
+
 exit 0

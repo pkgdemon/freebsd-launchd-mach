@@ -700,6 +700,45 @@ ls -lh "$WORK/rootfs/sbin/launchd"
 echo "==> Phase I1c: launchd built + installed"
 
 #
+# 3o. build libCoreFoundation (src/libCoreFoundation).
+#     swift-corelibs-foundation's pure-C CF, built standalone with
+#     DEPLOYMENT_RUNTIME_SWIFT=0 — no libswiftCore dep. 16 ICU-using
+#     and 2 Windows-only .c files are dropped from SRCS per the ICU
+#     audit at pkgdemon.github.io/freebsd-libcorefoundation-icu-audit.
+#
+#     Install: /usr/lib/libsystem/libCoreFoundation.so.6 + headers at
+#     /usr/include/CoreFoundation/.
+#
+echo "==> building libCoreFoundation (src/libCoreFoundation)"
+make -C "$ROOT/src/libCoreFoundation" \
+    DESTDIR="$WORK/rootfs" \
+    PREFIX=/usr \
+    SYSROOT="$WORK/rootfs" \
+    all install
+ls -lh "$WORK/rootfs/usr/lib/libsystem/libCoreFoundation.so" \
+       "$WORK/rootfs/usr/lib/libsystem/libCoreFoundation.so.6"
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+echo "==> libCoreFoundation built + installed"
+
+#
+# 3p. build test_corefoundation — smoke check that exercises CFDictionary
+#     + CFString + CFPropertyList XML/binary round-trip. Links libCore-
+#     Foundation.so.6 from /usr/lib/libsystem; verifies the legacy
+#     refcount path is alive and the plist driver works.
+#
+echo "==> building test_corefoundation"
+cc -I"$WORK/rootfs/usr/include" \
+   -L"$WORK/rootfs/usr/lib/libsystem" \
+   -Wl,-rpath,/usr/lib/libsystem \
+   -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_corefoundation" \
+   "$ROOT/src/libCoreFoundation-tests/test_corefoundation.c" \
+   -lCoreFoundation -ldispatch -lBlocksRuntime -lsystem_kernel -lpthread
+chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_corefoundation \
+    | grep -q "libCoreFoundation.so.* => /usr/lib/libsystem/" \
+    || { echo "FAIL: ldd doesn't resolve test_corefoundation to /usr/lib/libsystem/libCoreFoundation.so"; exit 1; }
+echo "==> test_corefoundation built + ldd verified"
+
+#
 # 3z. purge build packages + clean pkg cache + tear down chroot.
 #     Runs LAST in the build phase, after every chroot-side build
 #     (libdispatch) has used cmake/ninja/clang. Build pkgs (cmake/ninja
