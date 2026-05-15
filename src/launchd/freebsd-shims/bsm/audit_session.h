@@ -13,6 +13,12 @@
  * their already-present degraded paths: core.c checks the returned
  * port against MACH_PORT_NULL and treats errno == ENOSYS from
  * audit_session_port() as "no per-session port, carry on".
+ *
+ * NB: FreeBSD's base <bsm/audit.h> already *declares* (non-static)
+ * audit_session_self() and audit_session_join(), plus AU_ASSIGN_ASID
+ * / AU_DEFAUDITSID — so this shim must not redefine those. It only
+ * supplies the entry points FreeBSD's audit.h omits:
+ * _audit_session_self(), audit_session_port(), AU_SESSION_FLAG_*.
  */
 #ifndef _FREEBSD_SHIM_BSM_AUDIT_SESSION_H_
 #define _FREEBSD_SHIM_BSM_AUDIT_SESSION_H_
@@ -21,32 +27,14 @@
 #include <bsm/audit.h>
 #include <mach/mach.h>
 
-#ifndef AU_ASSIGN_ASID
-#define AU_ASSIGN_ASID			(-1)
-#endif
-#ifndef AU_DEFAUDITSID
-#define AU_DEFAUDITSID			0
-#endif
 #ifndef AU_SESSION_FLAG_IS_INITIAL
 #define AU_SESSION_FLAG_IS_INITIAL	0x0001
 #endif
 
 static __inline mach_port_t
-audit_session_self(void)
-{
-	return MACH_PORT_NULL;
-}
-
-static __inline mach_port_t
 _audit_session_self(void)
 {
 	return MACH_PORT_NULL;
-}
-
-static __inline au_asid_t
-audit_session_join(mach_port_t port __unused)
-{
-	return AU_DEFAUDITSID;
 }
 
 static __inline int

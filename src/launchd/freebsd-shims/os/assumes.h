@@ -17,6 +17,7 @@
 #define _OS_ASSUMES_H_SHIM_
 
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 
 /*
@@ -44,8 +45,24 @@
 	_r; \
 })
 
-/* os_assert* — hard assert variants. */
+/*
+ * posix_assumes_zero(e) — the POSIX-call sibling of os_assumes_zero.
+ * launchd-842 wraps raw syscalls with it: a return of -1 is the
+ * failure signal, so log errno on that path. Returns e unchanged so
+ * callers can still inspect the result (many do `... != -1`).
+ */
+#define posix_assumes_zero(e) __extension__({ \
+	__typeof__(e) _r = (e); \
+	if (_r == -1) { \
+		fprintf(stderr, "posix_assumes_zero: %s == -1 (errno %d) at %s:%d\n", \
+		    #e, errno, __FILE__, __LINE__); \
+	} \
+	_r; \
+})
+
+/* os_assert* / posix_assert_zero — hard assert variants. */
 #define os_assert(e)		assert(e)
 #define os_assert_zero(e)	assert((e) == 0)
+#define posix_assert_zero(e)	assert((e) != -1)
 
 #endif /* !_OS_ASSUMES_H_SHIM_ */
