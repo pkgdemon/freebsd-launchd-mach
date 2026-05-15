@@ -625,13 +625,15 @@ echo "==> mig install verified"
 #     consume them. For now this is the I1a checkpoint: mig runs, the
 #     expected .c/.h come out.
 #
-#     .defs handled: job, job_forward, job_reply, internal, helper.
-#     job_types.defs is a type-only include (no subsystem) — pulled in
-#     by the others, not compiled standalone. protocol_jobmgr.defs is
-#     deliberately skipped: it's NOT in Apple's Xcode build and imports
-#     nonexistent bootstrap_public.h (stale, like bootstrap_cmds'
-#     handler.c). mach_exc.defs / notify.defs are SDK-provided and not
-#     yet vendored — deferred to I1c.
+#     .defs handled: job, job_forward, job_reply, internal, helper,
+#     mach_exc, notify. job_types.defs is a type-only include (no
+#     subsystem) — pulled in by the others, not compiled standalone.
+#     protocol_jobmgr.defs is deliberately skipped: it's NOT in Apple's
+#     Xcode build and imports nonexistent bootstrap_public.h (stale,
+#     like bootstrap_cmds' handler.c). mach_exc.defs / notify.defs are
+#     SDK-provided on macOS; here they're vendored from ravynOS into
+#     src/launchd/src/ — core.c needs mach_excServer.h, runtime.c needs
+#     notifyServer.h.
 #
 echo "==> Phase I1a: generating launchd-842 MIG stubs"
 MIG_OUT="$WORK/launchd-mig"
@@ -641,7 +643,7 @@ mkdir -p "$MIG_OUT"
 # (the .defs `import` lines reference vproc.h etc., though those only
 # affect generated #include lines, not mig-time resolution).
 MIG_INCS="-I$ROOT/src/libmach/include -I$ROOT/src/launchd/liblaunch -I$ROOT/src/launchd/src"
-for d in job job_forward job_reply internal helper; do
+for d in job job_forward job_reply internal helper mach_exc notify; do
     defs="$ROOT/src/launchd/src/${d}.defs"
     echo "  mig: ${d}.defs"
     # -sheader emits ${d}Server.h — libvproc.c #includes helperServer.h
@@ -687,6 +689,27 @@ ls -lh "$WORK/rootfs/usr/lib/libsystem/liblaunch.so" \
        "$WORK/rootfs/usr/lib/libsystem/liblaunch.so.1"
 chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
 echo "==> Phase I1b: liblaunch built + installed"
+
+#
+# 3n. Phase I1c — build the launchd daemon (src/launchd/src).
+#     Seven hand-written TUs (launchd.c core.c runtime.c ipc.c log.c
+#     kill2.c ktrace.c) plus the MIG stubs from step 3l. Host build
+#     via bsd.prog.mk; MIGOUT points at the I1a output, SYSROOT at the
+#     in-build rootfs (liblaunch / libxpc / libdispatch / libsystem_
+#     kernel + their headers).
+#
+#     Install: /usr/local/sbin/launchd — NOT /sbin. This is not PID 1
+#     yet; the I1c checkpoint only proves launchd compiles, links, and
+#     can exec the no-IPC CLI path.
+#
+echo "==> Phase I1c: building launchd (src/launchd/src)"
+make -C "$ROOT/src/launchd/src" \
+    DESTDIR="$WORK/rootfs" \
+    MIGOUT="$MIG_OUT" \
+    SYSROOT="$WORK/rootfs" \
+    all install
+ls -lh "$WORK/rootfs/usr/local/sbin/launchd"
+echo "==> Phase I1c: launchd built + installed"
 
 #
 # 3z. purge build packages + clean pkg cache + tear down chroot.
