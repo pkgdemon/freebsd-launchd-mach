@@ -406,6 +406,23 @@ mach_msg_return_t mach_msg(
     mach_port_name_t   notify);
 
 /*
+ * mach_msg_destroy() — release the port rights and OOL memory
+ * referenced by a message that won't be sent. Apple-canonical.
+ */
+void mach_msg_destroy(mach_msg_header_t *msg);
+
+/*
+ * audit_token_to_au32() — unpack a Mach audit_token_t into its eight
+ * named uint32 fields. Lives in <bsm/libbsm.h> on Apple; we declare
+ * it next to audit_token_t (here in <mach/message.h>) so libmach,
+ * which defines it next to mach_msg_destroy, sees the prototype.
+ */
+void audit_token_to_au32(audit_token_t atok,
+    uint32_t *auidp, uint32_t *euidp, uint32_t *egidp,
+    uint32_t *ruidp, uint32_t *rgidp, uint32_t *pidp,
+    uint32_t *asidp, uint32_t *tidp);
+
+/*
  * mach_msg_send / mach_msg_receive — Apple's thin convenience wrappers
  * around mach_msg(). Inline so we don't add new exported symbols to
  * libsystem_kernel; matches Apple's xnu/libsyscall implementations.

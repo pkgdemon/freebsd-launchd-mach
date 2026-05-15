@@ -12,6 +12,8 @@
 #ifndef _MACH_MACH_TRAPS_H_
 #define _MACH_MACH_TRAPS_H_
 
+#include <mach/kern_return.h>	/* kern_return_t */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -24,6 +26,12 @@ mach_port_name_t mach_reply_port(void);
 mach_port_name_t mach_task_self(void);
 mach_port_name_t mach_thread_self(void);
 mach_port_name_t mach_host_self(void);
+
+/*
+ * pid_for_task() — map a task port back to its owning pid. Apple-
+ * canonical; lives alongside the other task-introspection traps.
+ */
+kern_return_t pid_for_task(mach_port_name_t task, int *pid);
 
 #ifdef __cplusplus
 }

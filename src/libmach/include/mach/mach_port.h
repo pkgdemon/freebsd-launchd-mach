@@ -151,6 +151,25 @@ kern_return_t mach_port_get_attributes(mach_port_name_t task,
     mach_port_name_t name, mach_port_flavor_t flavor,
     mach_port_info_t info, mach_msg_type_number_t *infoCnt);
 
+kern_return_t mach_port_mod_refs(mach_port_name_t task,
+    mach_port_name_t name, mach_port_right_t right,
+    mach_port_delta_t delta);
+
+kern_return_t mach_port_move_member(mach_port_name_t task,
+    mach_port_name_t member, mach_port_name_t after);
+
+kern_return_t mach_port_request_notification(mach_port_name_t task,
+    mach_port_name_t name, mach_msg_id_t msgid,
+    mach_port_mscount_t sync, mach_port_t notify,
+    mach_msg_type_name_t notifyPoly, mach_port_t *previous);
+
+kern_return_t mach_port_extract_right(mach_port_name_t task,
+    mach_port_name_t name, mach_msg_type_name_t desired,
+    mach_port_t *port, mach_msg_type_name_t *acquired);
+
+kern_return_t mach_port_set_mscount(mach_port_name_t task,
+    mach_port_name_t name, mach_port_mscount_t mscount);
+
 #ifdef __cplusplus
 }
 #endif
