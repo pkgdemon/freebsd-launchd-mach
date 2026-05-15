@@ -14,8 +14,13 @@
 
 cmake_minimum_required(VERSION 3.24)
 
+# freebsd-launchd-mach patch (2026-05-15): drop Swift from LANGUAGES.
+# Upstream targets the swift-foundation package; we build only the C/C++
+# library for libCoreFoundation to link against. The FreeBSD chroot has
+# no Swift toolchain, and CMake's project() probes every declared
+# language at configure time -> failure if Swift is listed but absent.
 project(SwiftFoundationICU
-    LANGUAGES CXX Swift)
+    LANGUAGES CXX)
 
 option(BUILD_SHARED_LIBS "build shared libraries" ON)
 
@@ -45,7 +50,13 @@ add_compile_definitions(
     $<$<COMPILE_LANGUAGE:C,CXX>:U_HAVE_STRTOD_L=1>
     $<$<COMPILE_LANGUAGE:C,CXX>:U_HAVE_XLOCALE_H=1>
     $<$<COMPILE_LANGUAGE:C,CXX>:U_HAVE_STRING_VIEW=1>
-    $<$<COMPILE_LANGUAGE:C,CXX>:U_DISABLE_RENAMING=$<IF:$<PLATFORM_ID:Darwin>,1,0>>
+    # freebsd-launchd-mach patch (2026-05-15): force U_DISABLE_RENAMING=1
+    # unconditionally. Upstream gates this on Darwin only, leaving FreeBSD
+    # at 0 - which makes ICU rename every public symbol (e.g. ucol_open
+    # becomes icu_74_ucol_open via urename.h #defines). CoreFoundation
+    # references the un-renamed names directly; without this flag CF
+    # cannot link against libicucore.so.
+    $<$<COMPILE_LANGUAGE:C,CXX>:U_DISABLE_RENAMING=1>
     $<$<COMPILE_LANGUAGE:C,CXX>:U_COMBINED_IMPLEMENTATION>
     $<$<COMPILE_LANGUAGE:C,CXX>:U_COMMON_IMPLEMENTATION>
     $<$<COMPILE_LANGUAGE:C,CXX>:U_I18N_IMPLEMENTATION>

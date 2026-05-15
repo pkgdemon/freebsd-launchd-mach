@@ -700,7 +700,81 @@ ls -lh "$WORK/rootfs/sbin/launchd"
 echo "==> Phase I1c: launchd built + installed"
 
 #
-# 3o. build libCoreFoundation (src/libCoreFoundation).
+# 3o. build swift-foundation-icu (src/swift-foundation-icu) -> libicucore.so.
+#     Apple's slimmed ICU fork purpose-built for swift-corelibs-foundation.
+#     CF's libCoreFoundation includes ICU headers via the private namespace
+#     <_foundation_unicode/uloc.h> (11 .c files); this fork ships those
+#     headers natively, no symlink alias required.
+#
+#     CMake build inside the chroot using cmake/ninja from buildpkgs.
+#     Three vendored CMakeLists patches recorded in src/swift-foundation-icu/
+#     PORTING_README.md: drop Swift from LANGUAGES, force U_DISABLE_RENAMING=1
+#     (CF references unprefixed symbols), and use standard CMAKE_INSTALL_*
+#     dirs instead of upstream's lib/swift/<system>/ SwiftPM nesting.
+#
+#     Installs:
+#       /usr/lib/libsystem/lib_FoundationICU.so   (the unified library)
+#       /usr/lib/libsystem/libicucore.so          (Apple-canonical alias)
+#       /usr/include/_foundation_unicode/*.h      (212 headers)
+#
+#     Plan: pkgdemon.github.io/freebsd-libicu-port-plan.html
+#
+echo "==> rsyncing src/swift-foundation-icu to chroot"
+mkdir -p "$WORK/rootfs/tmp/swift-foundation-icu"
+rsync -a --delete "$ROOT/src/swift-foundation-icu/" "$WORK/rootfs/tmp/swift-foundation-icu/"
+
+echo "==> building swift-foundation-icu in chroot"
+chroot "$WORK/rootfs" /bin/sh -ex <<'CHROOT_ICU'
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+mkdir -p /tmp/swift-foundation-icu-build
+cd /tmp/swift-foundation-icu-build
+cmake -G Ninja /tmp/swift-foundation-icu \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib/libsystem \
+    -DCMAKE_INSTALL_INCLUDEDIR=include \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_BUILD_TYPE=Release
+ninja
+ninja install
+CHROOT_ICU
+
+echo "==> creating libicucore.so alias (Apple-canonical name)"
+# swift-foundation-icu's CMake produces lib_FoundationICU.so (the target
+# name is _FoundationICU). Apple's macOS ships the same body of code as
+# /usr/lib/libicucore.dylib. Create both names so callers can link with
+# whichever they prefer (-l_FoundationICU or -licucore).
+ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/libsystem/libicucore.so"
+ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/libsystem/libicucore.so.74"
+ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/libsystem/lib_FoundationICU.so.74"
+
+# Re-prime ldconfig hints now that libicucore is installed.
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+
+# Cleanup chroot build artifacts.
+rm -rf "$WORK/rootfs/tmp/swift-foundation-icu" "$WORK/rootfs/tmp/swift-foundation-icu-build"
+
+#
+# 3o-verify. assert libicu install shape + ldd resolution.
+#
+echo "==> verifying libicu install"
+ls -la "$WORK/rootfs/usr/lib/libsystem/" | grep -E 'icu|FoundationICU' || true
+test -f "$WORK/rootfs/usr/lib/libsystem/lib_FoundationICU.so" \
+    || { echo "FAIL: lib_FoundationICU.so (the library binary) missing"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/libsystem/libicucore.so" \
+    || { echo "FAIL: libicucore.so symlink missing"; exit 1; }
+test -f "$WORK/rootfs/usr/include/_foundation_unicode/uloc.h" \
+    || { echo "FAIL: /usr/include/_foundation_unicode/uloc.h missing (CF needs it)"; exit 1; }
+test -f "$WORK/rootfs/usr/include/_foundation_unicode/uchar.h" \
+    || { echo "FAIL: /usr/include/_foundation_unicode/uchar.h missing"; exit 1; }
+test -f "$WORK/rootfs/usr/include/_foundation_unicode/ucal.h" \
+    || { echo "FAIL: /usr/include/_foundation_unicode/ucal.h missing"; exit 1; }
+chroot "$WORK/rootfs" ldconfig -r | grep -qE 'icucore|FoundationICU' \
+    || { echo "FAIL: ldconfig hints missing libicucore / lib_FoundationICU"; exit 1; }
+echo "==> libicu install verified"
+
+#
+# 3p. build libCoreFoundation (src/libCoreFoundation).
 #     swift-corelibs-foundation's pure-C CF, built standalone with
 #     DEPLOYMENT_RUNTIME_SWIFT=0 — no libswiftCore dep. 16 ICU-using
 #     and 2 Windows-only .c files are dropped from SRCS per the ICU

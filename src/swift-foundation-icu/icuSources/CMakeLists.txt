@@ -45,16 +45,23 @@ file(COPY
     DESTINATION
         ${CMAKE_BINARY_DIR}/_CModulesForClients)
 
-# Install binary
+# freebsd-launchd-mach patch (2026-05-15): use standard CMAKE_INSTALL_*
+# dirs instead of upstream's SwiftPM-style lib/swift/<system>/ nesting.
+# Upstream's layout fits Swift package consumers; we want libicucore at
+# /usr/lib/libsystem/ and headers at /usr/include/ to match CF's
+# expected #include <_foundation_unicode/...> resolution and the
+# project's install-layout spike.
 install(TARGETS _FoundationICU
-    ARCHIVE DESTINATION lib/${install_directory}/${SWIFT_SYSTEM_NAME}
-    LIBRARY DESTINATION lib/${install_directory}/${SWIFT_SYSTEM_NAME}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-# Install headers
+# Install headers — DIRECTORY copies the dir contents into the
+# destination, so include/_foundation_unicode/ ends up as
+# ${prefix}/include/_foundation_unicode/.
 install(DIRECTORY
             include/
         DESTINATION
-            lib/${install_directory})
+            ${CMAKE_INSTALL_INCLUDEDIR})
 
 set_property(GLOBAL APPEND PROPERTY SWIFT_FOUNDATION_ICU_EXPORTS _FoundationICU)
