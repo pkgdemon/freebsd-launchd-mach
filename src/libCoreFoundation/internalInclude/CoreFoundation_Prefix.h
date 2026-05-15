@@ -7,8 +7,25 @@
 	See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
 */
 
+/*
+ * freebsd-launchd-mach patch (2026-05-15): force the legacy non-Swift
+ * refcount path. Upstream defaults to Swift mode, which makes
+ * CFRetain/CFRelease call swift_retain/swift_release and CF init
+ * require __CFInitializeSwift / __CFSwiftGetBaseClass — symbols that
+ * live in libswiftCore.so. Our consumers (launchctl, configd,
+ * IPConfiguration, mDNSResponder, asl, notifyd, DiskArbitration) are
+ * pure-C system services with no Swift runtime; the Swift path would
+ * drag libswiftCore.so into every system-service binary as a startup
+ * dependency. Take the legacy bitfield-CAS refcount path instead
+ * (CFRuntime.c lines ~1430-1509), which is fully present in the
+ * source and just #else'd in Swift mode.
+ *
+ * See pkgdemon.github.io/freebsd-launchctl-corefoundation-spike.html
+ * §14.2 for the full reasoning. Reversible by flipping this back to
+ * 1 + bumping libCoreFoundation.so SOVERSION.
+ */
 #ifndef DEPLOYMENT_RUNTIME_SWIFT
-#define DEPLOYMENT_RUNTIME_SWIFT 1
+#define DEPLOYMENT_RUNTIME_SWIFT 0
 #endif
 
 #ifndef __COREFOUNDATION_PREFIX_H__
