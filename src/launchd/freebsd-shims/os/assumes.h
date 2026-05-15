@@ -77,12 +77,14 @@
 
 /*
  * _ctx variants — Apple's os/assumes.h has context-carrying versions
- * that thread a `ctx` cookie through the assumes-redirect callback.
- * Our redirect is unused, so the cookie is dropped.
+ * that thread (redirect_fn, ctx) through the assumes-redirect path.
+ * launchd-842 wraps these into job_assumes_zero / jobmgr_assumes_zero
+ * (with the per-job redirect callback). Our redirect is unused, so
+ * both redirect_fn and ctx are dropped.
  */
-#define os_assumes_ctx(ctx, e)		os_assumes(e)
-#define os_assumes_zero_ctx(ctx, e)	os_assumes_zero(e)
-#define posix_assumes_zero_ctx(ctx, e)	posix_assumes_zero(e)
+#define os_assumes_ctx(redirect, ctx, e)	os_assumes(e)
+#define os_assumes_zero_ctx(redirect, ctx, e)	os_assumes_zero(e)
+#define posix_assumes_zero_ctx(redirect, ctx, e) posix_assumes_zero(e)
 
 /*
  * __OS_COMPILETIME_ASSERT__(e) — Apple's compile-time assert builtin
