@@ -44,7 +44,8 @@ SRCS=		launchd.c \
 		ipc.c \
 		log.c \
 		kill2.c \
-		ktrace.c
+		ktrace.c \
+		forward_stubs.c
 
 # MIG-generated stubs. launchd is both client and server for the
 # job / internal / helper subsystems, server-only for mach_exc and
@@ -87,7 +88,7 @@ LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
 CFLAGS+=	-D__APPLE_API_PRIVATE -DPRIVATE=1
 CFLAGS+=	-fblocks			# libdispatch block syntax
 
-LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel -lpthread -lutil
+LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel -lpthread -lutil -lBlocksRuntime
 
 BINDIR=		/usr/local/sbin
 

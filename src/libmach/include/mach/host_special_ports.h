@@ -47,6 +47,12 @@ extern "C" {
 kern_return_t host_set_special_port(mach_port_name_t host,
     int which, mach_port_t port);
 
+/*
+ * host_set_UNDServer() — set the User Notification Daemon port.
+ * macOS-specific; stub on this port.
+ */
+kern_return_t host_set_UNDServer(host_t host, mach_port_t port);
+
 #ifdef __cplusplus
 }
 #endif

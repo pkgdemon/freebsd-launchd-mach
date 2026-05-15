@@ -127,4 +127,11 @@ posix_spawnattr_set_importancewatch_port_np(posix_spawnattr_t *attr,
 	return 0;
 }
 
+static __inline int
+posix_spawnattr_setcpumonitor_default(posix_spawnattr_t *attr)
+{
+	(void)attr;
+	return 0;
+}
+
 #endif /* _FREEBSD_SHIM_SYSTEM_SYS_SPAWN_H_ */

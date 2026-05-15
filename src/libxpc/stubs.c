@@ -25,6 +25,8 @@
 #include <errno.h>
 #include <stdio.h>
 #include <mach/mach.h>
+#include <xpc/xpc.h>
+#include <xpc/launchd.h>
 
 #ifndef LIBXPC_STUB_WARN
 #define LIBXPC_STUB_WARN(fn) \
@@ -75,4 +77,38 @@ vproc_transaction_end(vproc_t vp, vproc_transaction_t txn)
 {
 	(void)vp;
 	(void)txn;
+}
+
+/*
+ * xpc_domain_server() — MIG-server demux generated from Apple's SDK
+ * domain.defs. We don't ship domain.defs (it's in iOS SDK only); the
+ * function is referenced only from launchd's runtime.c dispatch
+ * fallback, where a "false" return tells the caller "not a domain
+ * message". libxpc is the link unit that gathers the launchd-XPC
+ * surface, so we plant the stub here. boolean_t (from mach/mach.h)
+ * is unsigned int on this port.
+ */
+extern boolean_t xpc_domain_server(void *request, void *reply);
+
+boolean_t
+xpc_domain_server(void *request, void *reply)
+{
+	(void)request;
+	(void)reply;
+	LIBXPC_STUB_WARN("xpc_domain_server");
+	return 0;	/* false — caller drops the message */
+}
+
+/*
+ * xpc_copy_entitlements_for_pid() — declared in <xpc/launchd.h>;
+ * Apple-backed by a syscall that asks csops(2) about a process's
+ * code-signing entitlements. FreeBSD has no code-signing entitlement
+ * surface, so we return NULL ("no entitlements").
+ */
+xpc_object_t
+xpc_copy_entitlements_for_pid(pid_t pid)
+{
+	(void)pid;
+	LIBXPC_STUB_WARN("xpc_copy_entitlements_for_pid");
+	return NULL;
 }

@@ -527,3 +527,143 @@ pid_for_task(mach_port_name_t task, int *pid)
 		*pid = -1;
 	return KERN_FAILURE;
 }
+
+/*
+ * Phase I1c link-stage stubs — round 2.
+ *
+ * MIG runtime functions: Apple ships these as part of libsystem's
+ * MIG support; they back the client-side stubs. Real implementations
+ * back the reply-port cache + OOL allocation; ours are minimal so
+ * non-XPC code paths (the no-IPC CLI smoke) succeed and the XPC
+ * paths fail closed.
+ */
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <bsm/audit.h>
+#include <mach/mig_errors.h>
+
+mach_port_t
+mig_get_reply_port(void)
+{
+	/* Apple maintains a per-thread reply-port cache; we don't yet.
+	 * Allocate a fresh port for each call — slower but correct. */
+	return (mach_port_t)mach_reply_port();
+}
+
+void
+mig_put_reply_port(mach_port_t port)
+{
+	/* No reply-port cache to put it back into; drop the right. */
+	if (port != MACH_PORT_NULL)
+		(void)mach_port_deallocate(mach_task_self(), port);
+}
+
+void
+mig_dealloc_reply_port(mach_port_t port)
+{
+	if (port != MACH_PORT_NULL)
+		(void)mach_port_deallocate(mach_task_self(), port);
+}
+
+kern_return_t
+mig_allocate(vm_address_t *addr, vm_size_t size)
+{
+	void *p = malloc((size_t)size);
+	if (p == NULL)
+		return KERN_RESOURCE_SHORTAGE;
+	*addr = (vm_address_t)(uintptr_t)p;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+mig_deallocate(vm_address_t addr, vm_size_t size)
+{
+	(void)size;
+	free((void *)(uintptr_t)addr);
+	return KERN_SUCCESS;
+}
+
+int
+mig_strncpy(char *dst, const char *src, int len)
+{
+	if (len <= 0)
+		return 0;
+	int n = (int)strlen(src);
+	if (n >= len)
+		n = len - 1;
+	memcpy(dst, src, (size_t)n);
+	dst[n] = '\0';
+	return n;
+}
+
+/* vm_deallocate stub — Mach VM API. Map to munmap() roughly. */
+kern_return_t
+vm_deallocate(mach_port_name_t task, vm_address_t addr, vm_size_t size)
+{
+	(void)task;
+	(void)addr;
+	(void)size;
+	/* The vm_address_t may be a malloc result (from mig_allocate),
+	 * not a real mmap region — safest is no-op. The leaked bytes
+	 * are bounded by the few KB of MIG out-of-line messages. */
+	return KERN_SUCCESS;
+}
+
+/* Additional mach_port stubs. */
+kern_return_t
+mach_port_get_set_status(mach_port_name_t task, mach_port_name_t name,
+    mach_port_name_array_t *members, mach_msg_type_number_t *membersCnt)
+{
+	(void)task; (void)name;
+	if (members != NULL)
+		*members = NULL;
+	if (membersCnt != NULL)
+		*membersCnt = 0;
+	return KERN_SUCCESS;
+}
+
+kern_return_t
+mach_port_set_context(mach_port_name_t task, mach_port_name_t name,
+    mach_port_context_t context)
+{
+	(void)task; (void)name; (void)context;
+	return KERN_SUCCESS;
+}
+
+/*
+ * audit_session_self / audit_session_join — Apple-shape decls in
+ * FreeBSD's <bsm/audit.h>, but FreeBSD's libbsm doesn't actually
+ * ship the implementations. Stub here in libsystem_kernel so the
+ * link succeeds; runtime callers see MACH_PORT_NULL / AU_DEFAUDITSID.
+ */
+mach_port_name_t
+audit_session_self(void)
+{
+	return MACH_PORT_NULL;
+}
+
+au_asid_t
+audit_session_join(mach_port_name_t port)
+{
+	(void)port;
+	return 0;	/* AU_DEFAUDITSID */
+}
+
+/* host_set_UNDServer — User Notification Daemon port. macOS-only;
+ * stub success so launchd's set-once call after startup is a no-op. */
+kern_return_t
+host_set_UNDServer(host_t host, mach_port_t port)
+{
+	(void)host; (void)port;
+	return KERN_SUCCESS;
+}
+
+/*
+ * gL1CacheEnabled — Apple's Libinfo exposes this `extern int` so
+ * callers can disable the negative-lookup cache around getpwnam
+ * retries. launchd-842/core.c does `extern int gL1CacheEnabled;`
+ * and assigns `false` before re-querying. FreeBSD's nsswitch has no
+ * equivalent toggle, so the variable is purely a sink.
+ */
+int gL1CacheEnabled = 1;

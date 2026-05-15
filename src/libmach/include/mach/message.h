@@ -211,6 +211,16 @@ typedef struct {
 	(MACH_MSGH_BITS_LOCAL(bits) | (MACH_MSGH_BITS_REMOTE(bits) << 8))
 
 /*
+ * round_msg(x) — round x up to the next natural_t boundary. Used by
+ * MIG-generated stubs and launchd's own message-sizing code. Apple
+ * defines it as a macro in <mach/message.h>; we follow suit so the
+ * symbol is resolved at compile time, not link time.
+ */
+#define round_msg(x) \
+	(((mach_msg_size_t)(x) + sizeof(natural_t) - 1) & \
+	 ~(sizeof(natural_t) - 1))
+
+/*
  * MACH_MSGH_BITS_COMPLEX — set on msgh_bits to signal that the message
  * body has descriptors (port references / OOL memory) after the header.
  * The kernel translates port descriptors between sender / receiver IPC

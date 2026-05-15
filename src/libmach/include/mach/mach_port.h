@@ -174,6 +174,19 @@ kern_return_t mach_port_extract_right(mach_port_name_t task,
 kern_return_t mach_port_set_mscount(mach_port_name_t task,
     mach_port_name_t name, mach_port_mscount_t mscount);
 
+/*
+ * mach_port_context_t — a per-name kernel-stashed pointer value
+ * (Apple uses it for libdispatch's port-to-source mapping).
+ */
+typedef uintptr_t mach_port_context_t;
+
+kern_return_t mach_port_set_context(mach_port_name_t task,
+    mach_port_name_t name, mach_port_context_t context);
+
+kern_return_t mach_port_get_set_status(mach_port_name_t task,
+    mach_port_name_t name, mach_port_name_array_t *members,
+    mach_msg_type_number_t *membersCnt);
+
 #ifdef __cplusplus
 }
 #endif

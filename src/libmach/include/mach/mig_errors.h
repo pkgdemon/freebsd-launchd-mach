@@ -65,6 +65,14 @@ extern void mig_put_reply_port(mach_port_t reply_port);
 extern char *mig_user_allocate(vm_size_t size);
 extern void mig_user_deallocate(char *data, vm_size_t size);
 
+/*
+ * mig_allocate / mig_deallocate — Apple-shape OOL-data hooks the
+ * generated stubs call to obtain/release a variable-length buffer.
+ * Distinct from mig_user_allocate; matches Apple's <mach/mig.h>.
+ */
+extern kern_return_t mig_allocate(vm_address_t *addr, vm_size_t size);
+extern kern_return_t mig_deallocate(vm_address_t addr, vm_size_t size);
+
 /* Bounded string copy used by generated string-argument stubs. */
 extern int mig_strncpy(char *dest, const char *src, int len);
 
