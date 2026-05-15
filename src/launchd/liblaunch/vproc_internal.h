@@ -36,8 +36,11 @@ typedef char * logmsg_t;
 typedef pid_t * pid_array_t;
 typedef mach_port_t vproc_mig_t;
 
-#if defined(job_MSG_COUNT) || defined (xpc_domain_MSG_COUNT)
-/* HACK */
+#if defined(job_MSG_COUNT) || defined(xpc_domain_MSG_COUNT) || \
+    defined(job_forward_MSG_COUNT) || defined(job_reply_MSG_COUNT) || \
+    defined(internal_MSG_COUNT)
+/* HACK — pull launchd's core.h (which defines job_t / jobmgr_t)
+ * into the MIG-server / -reply translation units that need them. */
 #include "core.h"
 #endif
 
