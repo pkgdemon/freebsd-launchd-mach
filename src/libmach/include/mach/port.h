@@ -52,7 +52,10 @@ typedef natural_t mach_port_urefs_t;
 typedef integer_t mach_port_delta_t;
 typedef natural_t mach_port_seqno_t;
 typedef natural_t mach_port_mscount_t;
+#ifndef _MACH_PORT_MSGCOUNT_T_
+#define _MACH_PORT_MSGCOUNT_T_
 typedef natural_t mach_port_msgcount_t;
+#endif
 typedef natural_t mach_port_rights_t;
 
 #endif /* !_MACH_PORT_H_ */

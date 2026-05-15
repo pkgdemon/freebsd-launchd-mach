@@ -78,6 +78,16 @@ typedef int		mach_port_flavor_t;
 #define MACH_PORT_RECEIVE_STATUS	2
 #define MACH_PORT_DNREQUESTS_SIZE	3
 
+/*
+ * mach_port_msgcount_t lives in <mach/port.h>, which includes us — so
+ * we can't pull port.h back in without a cycle. Typedef-locally with
+ * a guard matching the one we'd want port.h to add.
+ */
+#ifndef _MACH_PORT_MSGCOUNT_T_
+#define _MACH_PORT_MSGCOUNT_T_
+typedef natural_t mach_port_msgcount_t;
+#endif
+
 struct mach_port_limits {
 	mach_port_msgcount_t	mpl_qlimit;	/* port queue depth */
 };
