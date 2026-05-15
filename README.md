@@ -341,13 +341,71 @@ Sub-phases:
   libuuid-API shim (array `uuid_t` + `uuid_generate` / `uuid_unparse`
   / &hellip;), with libxpc's `libnv` + `xpc_misc.c` / `xpc_type.c`
   updated to match.
-- **I1c &mdash; `launchd` daemon binary** &mdash; *next.* `core.c`
-  alone is 12k LOC; needs the MIG output linked, the full shim
-  surface, and the MIG-runtime symbols resolved.
-- **I1d &mdash; `launchctl`** &mdash; *pending.*
-- **I1e &mdash; `LAUNCHD-BUILD-OK` marker** &mdash; *pending.*
-  Phase I1's exit criterion: `launchd` + `launchctl` binaries build
-  and execute their no-IPC CLI paths (`launchd -h`, `launchctl help`).
+- **I1c &mdash; `launchd` daemon binary** &mdash; *done.* `/sbin/launchd`
+  (235 KiB ELF) builds, links, installs. `core.c` alone is 12k LOC;
+  getting it to compile + link took ~17 new shims in
+  `src/launchd/freebsd-shims/`, ~8 new `<mach/*>` headers in
+  `libmach`, the launchd-internal XPC vocabulary in
+  `<xpc/private.h>`, and ~25 libsystem_kernel stubs in
+  `libmach/mach_traps.c` so the link succeeds and runtime calls
+  fail closed. 23 smoke markers green.
+- **I1d &mdash; `LAUNCHD-BUILD-OK` marker** &mdash; *next.* `run.sh`
+  step that execs `/sbin/launchd` on a no-IPC CLI path (`launchd -h`
+  or equivalent), checks for expected output, prints
+  `LAUNCHD-BUILD-OK`. Closes out Phase I1c proper.
+- **I1e &mdash; `launchctl`** &mdash; *deferred until the
+  GNUstep + CoreFoundation stack lands.* `support/launchctl.c` is
+  4,549 LOC with 245 CoreFoundation calls plus
+  `<CoreFoundation/CFPriv.h>` and `<CoreFoundation/CFLogUtilities.h>`
+  SPI headers; tractable only once a real CF implementation is on
+  the system. See the next section.
+
+## CoreFoundation pivot before `launchctl`
+
+The launchd daemon itself uses **zero** CoreFoundation (audit
+2026-05-15: 0 `CF*` calls across `launchd.c` + `core.c` +
+`runtime.c` + `ipc.c` + `log.c` + `kill2.c` + `ktrace.c`). It reads
+plists through the lower-level `launch_data_t` API in `liblaunch`.
+Any consumer that talks to launchd over Mach RPC &mdash; test
+programs, eventually `configd`, third-party daemons &mdash; can do
+so without a CF implementation.
+
+`launchctl` is the lone CF holdout. Rather than open the 4,549-LOC
+file with no CF implementation present (which would mean
+stub-patching at 245 call sites), the plan is to land a real
+CF/Foundation surface first:
+
+1. **libobjc2** &mdash; GNUstep's Objective-C runtime. Check whether
+   gershwin-developer already ships it; vendor from
+   `gnustep/libobjc2` if not.
+2. **gnustep-make** (`tools-make`) &mdash; the build system the
+   GNUstep libraries use.
+3. **gnustep-base** (`libs-base`) &mdash; Foundation classes
+   (`NSString`, `NSArray`, `NSDictionary`, `NSPropertyList`,
+   &hellip;). Not strictly required for `launchctl` (pure C), but the
+   natural pair for `libs-corebase` and a prerequisite for any
+   later Foundation-using daemon.
+4. **gnustep-corebase** (`libs-corebase`) &mdash; pure-C
+   CoreFoundation (`CFString`, `CFArray`, `CFDictionary`,
+   `CFPropertyList`, &hellip;). The primary CF dependency for
+   `launchctl`.
+5. **swift-corelibs-foundation side-by-side evaluation** &mdash;
+   after GNUstep lands, investigate adding swift-corelibs-foundation
+   alongside as a second CF provider, primarily for whatever SPI
+   surface (`CFPriv.h`, `CFLogUtilities.h`) `libs-corebase` doesn't
+   cover. Decide whether to ship it before opening `launchctl.c`.
+
+The companion
+[**`freebsd-libxpc-foundation-spike`**](https://pkgdemon.github.io/freebsd-libxpc-foundation-spike.html)
+sketches the larger picture: `libgnustep-base` alone covers every
+Foundation consumer, while `libgnustep-corebase` + a supplementary
+`libCFRuntime.so` (sourced from swift-corelibs-foundation's CF +
+CF-Lite-1153.18 Mach `.c` files) covers the CF-only consumers
+(`configd`, `SystemConfiguration`, `IPConfiguration`).
+
+After that stack is in place, **I1e (`launchctl`)** becomes a
+focused port against a real CF surface rather than a 245-stub patch
+job.
 
 After I1, an explicit checkpoint precedes any PID-1 work (Phase I2:
 core functionality &mdash; KeepAlive, WatchPaths, Sockets, &hellip;).
