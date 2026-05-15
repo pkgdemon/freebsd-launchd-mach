@@ -135,16 +135,6 @@ if [ -n "$RUNTIME_PKGS" ] || [ -n "$BUILD_PKGS" ]; then
             IGNORE_OSVERSION=yes \
             LICENSES_ACCEPTED=NVIDIA \
             pkg install -y $RUNTIME_PKGS
-
-        # ---- dhcpcd: silence DHCPv6 retry spam ----
-        if [ -f "$WORK/rootfs/usr/local/etc/dhcpcd.conf" ]; then
-            cat >> "$WORK/rootfs/usr/local/etc/dhcpcd.conf" <<'EOF'
-
-# Live ISO overrides (see build.sh comment).
-nodhcp6
-quiet
-EOF
-        fi
     fi
 
     if [ -n "$BUILD_PKGS" ]; then
@@ -209,14 +199,13 @@ ls -lh "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
        "$WORK/rootfs/usr/libdata/pkgconfig/libsystem_kernel.pc"
 
 # ldconfig hint so rtld finds libsystem_kernel.so at runtime. Two parts:
-# (a) drop-in file at /usr/local/libdata/ldconfig/freebsd-launchd-mach
-#     so /etc/rc.d/ldconfig at boot adds /usr/lib/libsystem to hints.
+# (a) /etc/ld-elf.so.conf entry — FreeBSD-base mechanism;
+#     /etc/rc.d/ldconfig reads it at boot and adds the path to
+#     ldconfig's hint set. No /usr/local involvement.
 # (b) ldconfig -m primes /var/run/ld-elf.so.hints inside rootfs.uzip
 #     so the live ISO boots with hints already correct under launchd.
 echo "==> writing ldconfig hint for /usr/lib/libsystem"
-mkdir -p "$WORK/rootfs/usr/local/libdata/ldconfig"
-echo "/usr/lib/libsystem" \
-    > "$WORK/rootfs/usr/local/libdata/ldconfig/freebsd-launchd-mach"
+echo "/usr/lib/libsystem" >> "$WORK/rootfs/etc/ld-elf.so.conf"
 chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
 
 #
@@ -302,18 +291,18 @@ ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap"
 # bootstrap_server — Phase G2c standalone daemon. Allocates the
 # service port, publishes via host_set_special_port, runs the
 # bootstrap_server_run loop until SIGTERM. Installs to
-# /usr/local/sbin/; run.sh starts/stops it for the smoke test.
+# /usr/sbin/ (matches the install-layout spike's system-daemon
+# convention); run.sh starts/stops it for the smoke test.
 echo "==> building bootstrap_server"
-mkdir -p "$WORK/rootfs/usr/local/sbin"
 cc -I"$WORK/rootfs/usr/include" \
    -I"$ROOT/src/bootstrap" \
    -L"$WORK/rootfs/usr/lib/libsystem" \
    -Wl,-rpath,/usr/lib/libsystem \
-   -o "$WORK/rootfs/usr/local/sbin/bootstrap_server" \
+   -o "$WORK/rootfs/usr/sbin/bootstrap_server" \
    "$ROOT/src/bootstrap/bootstrap_server.c" \
    "$ROOT/src/bootstrap/libbootstrap.c" \
    -lsystem_kernel -lpthread
-ls -lh "$WORK/rootfs/usr/local/sbin/bootstrap_server"
+ls -lh "$WORK/rootfs/usr/sbin/bootstrap_server"
 
 # test_bootstrap_remote — Phase G2d cross-process client. Validates
 # that a fresh process finds the daemon via task_get_bootstrap_port
@@ -344,10 +333,8 @@ test -f "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so.0" \
     || { echo "FAIL: libsystem_kernel.so.0 (the library binary) missing"; exit 1; }
 test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
     || { echo "FAIL: libsystem_kernel.so (dev symlink to .so.0) missing"; exit 1; }
-test -f "$WORK/rootfs/usr/local/libdata/ldconfig/freebsd-launchd-mach" \
-    || { echo "FAIL: ldconfig drop-in missing"; exit 1; }
-test ! -e "$WORK/rootfs/usr/local/lib/libmach.so" \
-    || { echo "FAIL: old /usr/local/lib/libmach.so still present"; exit 1; }
+grep -q '^/usr/lib/libsystem$' "$WORK/rootfs/etc/ld-elf.so.conf" \
+    || { echo "FAIL: /etc/ld-elf.so.conf missing /usr/lib/libsystem"; exit 1; }
 chroot "$WORK/rootfs" ldconfig -r | grep -q libsystem_kernel \
     || { echo "FAIL: ldconfig hints missing libsystem_kernel"; exit 1; }
 chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libmach \

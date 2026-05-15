@@ -139,9 +139,9 @@ fi
 # SIGKILL forces immediate exit and doesn't rely on `wait` returning.
 # No `wait` follows: reaping is left to init at script exit, which
 # is fine for a smoke test that doesn't reuse the PID.
-if [ -x /usr/local/sbin/bootstrap_server ] && \
+if [ -x /usr/sbin/bootstrap_server ] && \
    [ -x /usr/tests/freebsd-launchd-mach/test_bootstrap_remote ]; then
-    /usr/local/sbin/bootstrap_server &
+    /usr/sbin/bootstrap_server &
     BOOTSTRAP_PID=$!
     trap 'kill -KILL $BOOTSTRAP_PID 2>/dev/null' EXIT INT TERM
     # Give the daemon a beat to allocate its port + register host slot.
