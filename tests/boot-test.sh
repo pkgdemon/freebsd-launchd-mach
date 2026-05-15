@@ -262,6 +262,17 @@ expect {
     }
     "MIG-BUILD-OK" { puts "\nOK: mig + migcom installed and runnable" }
 }
+expect {
+    timeout {
+        puts "\nFAIL: LAUNCHD-BUILD marker not seen"
+        exit 1
+    }
+    "LAUNCHD-BUILD-FAIL" {
+        puts "\nFAIL: /sbin/launchd failed to exec / reject correctly"
+        exit 1
+    }
+    "LAUNCHD-BUILD-OK" { puts "\nOK: /sbin/launchd execs + rejects non-PID-1" }
+}
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns
 # halt -p into a clean shutdown rather than a reset loop).

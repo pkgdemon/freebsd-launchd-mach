@@ -244,4 +244,32 @@ else
     exit 1
 fi
 
+# 7. launchd-842 daemon: must exec + reject non-PID-1 invocation.
+# launchd-842's main() (launchd.c:163) checks
+#   getpid() != 1 && getppid() != 1
+# and exits EXIT_FAILURE with a "not meant to be run directly"
+# message when both are true — which is the case from a shell.
+# Smoke proves: (a) rtld resolves all of liblaunch / libxpc /
+# libdispatch / libsystem_kernel / libBlocksRuntime / libutil /
+# libpthread, (b) main() actually runs (libc + stdio + getpid OK),
+# (c) the non-PID-1 guard fires. No Mach IPC exercised — that's
+# I2 territory.
+if [ -x /sbin/launchd ]; then
+    out=$(/sbin/launchd 2>&1)
+    rc=$?
+    case "$out" in
+        *"not meant to be run directly"*)
+            echo "LAUNCHD-BUILD-OK: /sbin/launchd execs and rejects non-PID-1 invocation"
+            ;;
+        *)
+            echo "LAUNCHD-BUILD-FAIL: unexpected output (rc=$rc): $out"
+            ldd /sbin/launchd 2>&1 || true
+            exit 1
+            ;;
+    esac
+else
+    echo "LAUNCHD-BUILD-FAIL: /sbin/launchd missing"
+    exit 1
+fi
+
 exit 0
