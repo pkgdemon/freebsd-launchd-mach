@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <stdio.h>		/* snprintf (iter-14 wrapper-trace) */
 #include <errno.h>
 #include <unistd.h>
 #include <spawn.h>		/* posix_spawnattr_t, posix_spawn (FreeBSD base) */
@@ -187,6 +188,20 @@ freebsd_shim_posix_spawn(pid_t *pid, const char *path,
 	short flags = 0;
 	if (sa != NULL) {
 		(void)posix_spawnattr_getflags(sa, &flags);
+	}
+	/* iter 14 diagnostic: prove the wrapper is reachable from the
+	 * launchd child. stderr is wired to /dev/console at PID-1 boot
+	 * via init.sh, and the runtime_fork child inherits that fd. */
+	{
+		char dbg[256];
+		int n = snprintf(dbg, sizeof(dbg),
+		    "freebsd_shim_posix_spawn: path=%s flags=0x%x SETEXEC=%d\n",
+		    path ? path : "(null)", (unsigned)flags,
+		    (flags & POSIX_SPAWN_SETEXEC) ? 1 : 0);
+		if (n > 0) {
+			ssize_t w = write(2, dbg, (size_t)n);
+			(void)w;
+		}
 	}
 	if (flags & POSIX_SPAWN_SETEXEC) {
 		(void)execve(path, argv, envp);
