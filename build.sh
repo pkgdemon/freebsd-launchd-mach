@@ -875,6 +875,26 @@ chroot "$WORK/rootfs" ldd /bin/launchctl \
 echo "==> launchctl built + ldd verified"
 
 #
+# 3r. build hwregd (src/hwregd/hwregd.c).
+#     freebsd-launchd-mach hardware registry daemon. Phase 0 iter 1:
+#     pure libc daemon, no library deps. Reads /dev/devctl events
+#     and logs them to /var/log/hwregd.log via the launchd plist's
+#     StandardErrorPath. Future iters add the devmatch search_hints
+#     parser, kldload-on-nomatch, and Mach pub/sub.
+#     Install: /usr/sbin/hwregd. Smoke marker HWREGD-BUILD-OK.
+#     Plan: pkgdemon.github.io/freebsd-hardware-registry-iokit-plan.html
+#
+echo "==> building hwregd (src/hwregd)"
+mkdir -p "$WORK/rootfs/usr/sbin"
+make -C "$ROOT/src/hwregd" \
+    DESTDIR="$WORK/rootfs" \
+    all install
+ls -lh "$WORK/rootfs/usr/sbin/hwregd"
+test -x "$WORK/rootfs/usr/sbin/hwregd" \
+    || { echo "FAIL: /usr/sbin/hwregd not installed or not executable"; exit 1; }
+echo "==> HWREGD-BUILD-OK"
+
+#
 # 3z. purge build packages + clean pkg cache + tear down chroot.
 #     Runs LAST in the build phase, after every chroot-side build
 #     (libdispatch) has used cmake/ninja/clang. Build pkgs (cmake/ninja

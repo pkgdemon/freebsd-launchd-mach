@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  org.freebsd.hwregd.plist
+
+  Boot-time launchd plist for the freebsd-launchd-mach hardware
+  registry daemon. Replaces FreeBSD-devd's role for kldload-on-
+  nomatch + hardware event fanout (devd was removed at commit
+  88694f0; hwregd is the structured replacement, plan at
+  pkgdemon.github.io/freebsd-hardware-registry-iokit-plan.html).
+
+  iter 1: daemon is a /dev/devctl read-only logger. RunAtLoad=true
+  so it starts immediately at PID-1 launchd boot; KeepAlive=true so
+  any crash gets respawned. StandardErrorPath routes the per-event
+  log lines to a known file so we can grep them post-boot for CI
+  smoke verification. StandardOutPath same destination; the daemon
+  doesn't currently write to stdout but if it ever does we don't
+  want it lost.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>org.freebsd.hwregd</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/sbin/hwregd</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/var/log/hwregd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/hwregd.log</string>
+</dict>
+</plist>
