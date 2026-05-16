@@ -163,8 +163,22 @@ typedef struct os_log_s *os_log_t;
 #endif
 
 #include "ForFoundationOnly.h"
-#if DEPLOYMENT_RUNTIME_SWIFT
+/*
+ * freebsd-launchd-mach patch (2026-05-15): also pull in
+ * ForSwiftFoundationOnly.h on FreeBSD, regardless of
+ * DEPLOYMENT_RUNTIME_SWIFT. The header carries the typedefs for
+ * _CFThreadRef / _CFThreadSpecificKey and the extern declaration for
+ * _CFMainPThread, which CFPlatform.c and CFRuntime.c reference in
+ * their FreeBSD-specific code paths. Upstream always builds with
+ * DEPLOYMENT_RUNTIME_SWIFT=1 so they never hit this; we set it to 0
+ * to avoid the libswiftCore dependency, which uniquely exposes this
+ * gap. Including the header is safe in non-Swift mode -- it only
+ * brings in declarations, no Swift-specific types.
+ */
+#if DEPLOYMENT_RUNTIME_SWIFT || TARGET_OS_BSD
 #include "ForSwiftFoundationOnly.h"
+#endif
+#if DEPLOYMENT_RUNTIME_SWIFT
 #include "CFString.h"
 #endif
 
