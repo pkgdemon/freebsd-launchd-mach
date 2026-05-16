@@ -4750,7 +4750,55 @@ job_start_child(job_t j)
 		file2exec = j->prog ? j->prog : argv[0];
 	}
 
+#ifdef __FreeBSD__
+	/*
+	 * freebsd-launchd-mach iter 15 (2026-05-16): emulate Apple's
+	 * POSIX_SPAWN_SETEXEC on FreeBSD.
+	 *
+	 * Apple semantic of POSIX_SPAWN_SETEXEC: do not fork; replace
+	 * the calling process with the new program. launchd ALWAYS
+	 * sets this flag (spflags initializer at line 4562 above) and
+	 * runs posix_spawn from the already-forked runtime_fork child,
+	 * so the child becomes the job's program in-place and launchd's
+	 * EVFILT_PROC watch on that PID tracks the job.
+	 *
+	 * FreeBSD's libc posix_spawn has no SETEXEC equivalent. The
+	 * SETEXEC bit (0x40, defined in our shim spawn.h) is outside
+	 * FreeBSD's POSIX_SPAWN_VALID_FLAGS=0x3F so the bare psf call
+	 * either rejects with EINVAL or silently fork+execs into a
+	 * grandchild -- both break launchd's process tracking and
+	 * neither delivers the new program in-place. PID-1 boot symptom
+	 * before this fix: one runtime.c:719 child-sysctlbyname trace
+	 * (fork happened), then 8 minutes of silence (exec failed).
+	 *
+	 * The earlier macro-wrapper approach (shim's spawn.h "#define
+	 * posix_spawn freebsd_shim_posix_spawn" + static-inline)
+	 * compiled clean but the wrapper was never actually reached --
+	 * suspected interaction with core.c's "#include <spawn.h>" at
+	 * line 83 redeclaring the symbol after our macros are defined.
+	 * Direct patch here is unambiguous: no macro substitution, no
+	 * include-order dependency, evaluated at the exact call site.
+	 *
+	 * Non-SETEXEC path is preserved as fallback. psf may be the
+	 * shimmed wrapper or libc's real posix_spawn -- doesn't matter
+	 * here because SETEXEC is the only case where the difference
+	 * matters and we've already handled it.
+	 */
+	{
+		short __spflags = 0;
+		(void)posix_spawnattr_getflags(&spattr, &__spflags);
+		if (__spflags & POSIX_SPAWN_SETEXEC) {
+			/* execve replaces this process; only returns on
+			 * failure. errno is already set by execve. */
+			(void)execve(file2exec, (char *const *)argv, environ);
+		} else {
+			errno = psf(NULL, file2exec, NULL, &spattr,
+			    (char *const *)argv, environ);
+		}
+	}
+#else
 	errno = psf(NULL, file2exec, NULL, &spattr, (char *const *)argv, environ);
+#endif
 
 #if HAVE_SANDBOX && !TARGET_OS_EMBEDDED
 out_bad:
