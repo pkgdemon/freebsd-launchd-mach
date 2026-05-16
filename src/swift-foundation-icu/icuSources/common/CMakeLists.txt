@@ -302,15 +302,23 @@ message(STATUS "freebsd-launchd-mach: ICU data symbol = ${ICU_DATA_SYMBOL}")
 
 set(ICU_PACKAGED_BIN_PATH "${_freebsd_icu_packaged_bin}")
 configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/freebsd_icu_packaged_data.S.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.S"
+    "${CMAKE_CURRENT_SOURCE_DIR}/freebsd_icu_packaged_data.c.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.c"
     @ONLY)
 
-# Step 4: add generated .S to the library + tell CMake it depends on the .bin
+# Step 4: add generated .c (with inline asm) to the library + tell
+# CMake it depends on the .bin so ninja rebuilds when the .bin
+# regenerates.
+#
+# We use a .c file with a top-level __asm__ block rather than a
+# standalone .S because CMake's per-file LANGUAGE override on a .S
+# in a child directory doesn't always reach the target's compile
+# list (iteration #10 silently dropped the .S from the build). A
+# .c file is auto-detected, no override needed.
 set_source_files_properties(
-    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.S"
+    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.c"
     PROPERTIES
         OBJECT_DEPENDS "${_freebsd_icu_packaged_bin}"
-        LANGUAGE C)
+        GENERATED TRUE)
 target_sources(_FoundationICU PRIVATE
-    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.S")
+    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.c")
