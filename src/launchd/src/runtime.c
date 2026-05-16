@@ -21,6 +21,7 @@
 #include "config.h"
 #include "runtime.h"
 
+#include <dispatch/dispatch.h>		/* freebsd-launchd-mach: demand_port_set MACH_RECV source */
 #include <mach/mach.h>
 #include <mach/mach_error.h>
 #include <mach/boolean.h>
@@ -179,6 +180,12 @@ union do_notify_max_sz {
 	union __ReplyUnion__do_notify_subsystem rep;
 };
 
+/*
+ * Forward decl — defined alongside mportset_callback later in this file
+ * (the dispatch_function_t adapter; see comments at definition).
+ */
+static void _demand_port_set_dispatch_handler(void *ctx);
+
 void
 launchd_runtime_init(void)
 {
@@ -189,20 +196,40 @@ launchd_runtime_init(void)
 	os_assert_zero(mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_PORT_SET, &demand_port_set));
 	os_assert_zero(mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_PORT_SET, &ipc_port_set));
 	/*
-	 * freebsd-launchd-mach patch (2026-05-16): soft-fail
-	 * EVFILT_MACHPORT registration. FreeBSD's kqueue filter table
-	 * is sized at EVFILT_SYSCOUNT == 13; mach.ko cannot register
-	 * EVFILT_MACHPORT (slot -14) without a FreeBSD kernel patch,
-	 * which the project's no-kernel-patches rule disallows.
-	 * Without this filter, launchd loses demand-launch (start a
-	 * service when a message hits its port). All RunAtLoad +
-	 * KeepAlive daemons (including org.freebsd.getty) still work.
-	 * Real fix: route Mach receive via libdispatch sources, or
-	 * land a FreeBSD-base patch to bump EVFILT_SYSCOUNT.
+	 * freebsd-launchd-mach patch (2026-05-16): use a libdispatch
+	 * MACH_RECV source for demand_port_set instead of the upstream
+	 * kqueue EVFILT_MACHPORT registration.
+	 *
+	 * Why: FreeBSD's kqueue filter table is sized at EVFILT_SYSCOUNT
+	 * == 13; mach.ko cannot register EVFILT_MACHPORT (slot -14)
+	 * without a FreeBSD-base kernel patch, which the project's
+	 * no-kernel-patches rule disallows (memory: no_kernel_patches).
+	 *
+	 * Architecturally correct: libdispatch's MACH_RECV polling
+	 * backend (memory: phase_e_libdispatch_mach_recv) already does
+	 * exactly what we want -- runs a polling thread, invokes the
+	 * handler when a message arrives at the port (or any port in
+	 * the set, since port sets are receive-rights internally).
+	 * Handler invokes mportset_callback (the same callback the
+	 * kqueue path would invoke), which then walks the set and
+	 * dispatches each port with pending messages to its kq_callback.
+	 *
+	 * Dedicated serial queue keeps mportset_callback off any other
+	 * dispatch thread's path; concurrent access to launchd's
+	 * globals is the same shape as the kqueue-driven version was.
+	 * ipc_port_set doesn't need this -- it uses
+	 * xpc_pipe_try_receive (libdispatch-internal) at runtime.c:1043.
 	 */
-	if (kevent_mod(demand_port_set, EVFILT_MACHPORT, EV_ADD, 0, 0, &kqmportset_callback) == -1) {
-		launchd_syslog(LOG_NOTICE, "kevent_mod EVFILT_MACHPORT failed (%d); demand-launch disabled, RunAtLoad/KeepAlive daemons unaffected", errno);
-	}
+	static dispatch_queue_t _demand_port_set_queue;
+	static dispatch_source_t _demand_port_set_source;
+	_demand_port_set_queue = dispatch_queue_create("org.freebsd.launchd.demand-port-set", NULL);
+	os_assert(_demand_port_set_queue != NULL);
+	_demand_port_set_source = dispatch_source_create(DISPATCH_SOURCE_TYPE_MACH_RECV,
+	    demand_port_set, 0, _demand_port_set_queue);
+	os_assert(_demand_port_set_source != NULL);
+	dispatch_source_set_event_handler_f(_demand_port_set_source,
+	    _demand_port_set_dispatch_handler);
+	dispatch_resume(_demand_port_set_source);
 
 	os_assert_zero(launchd_mport_create_recv(&launchd_internal_port));
 	os_assert_zero(launchd_mport_make_send(launchd_internal_port));
@@ -486,6 +513,17 @@ log_kevent_struct(int level, struct kevent *kev_base, int indx)
 
 	launchd_syslog(level, "KEVENT[%d]: udata = %p data = 0x%lx ident = %s filter = %s flags = %s fflags = %s",
 			indx, kev->udata, kev->data, ident_buf, filter_str, flags_buf, fflags_buf);
+}
+
+/*
+ * freebsd-launchd-mach: adapter to make mportset_callback() callable
+ * via dispatch_source_set_event_handler_f, which expects a
+ * dispatch_function_t (void (*)(void *)) rather than void (void).
+ */
+static void
+_demand_port_set_dispatch_handler(void *ctx __attribute__((unused)))
+{
+	mportset_callback();
 }
 
 void
