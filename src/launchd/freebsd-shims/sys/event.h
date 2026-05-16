@@ -23,25 +23,45 @@
 
 #include_next <sys/event.h>
 
-/* EVFILT_PROC NOTE_* extensions. Pick bits that don't collide with
- * the FreeBSD-base NOTE_* set. */
+/* EVFILT_PROC NOTE_* extensions. Apple-only sub-flags carrying
+ * richer exit reasons; FreeBSD's EVFILT_PROC accepts only NOTE_EXIT,
+ * NOTE_FORK, NOTE_EXEC, NOTE_TRACK, NOTE_TRACKERR, NOTE_CHILD.
+ *
+ * Earlier this shim picked unique non-zero bits "so they don't
+ * collide" with FreeBSD's NOTE_* set. That broke PID-1 launchd
+ * boot: launchd's job_start ORs these into proc_fflags and passes
+ * them to kevent_mod(EVFILT_PROC). FreeBSD's filt_procattach
+ * rejects fflag bits outside NOTE_PCTRLMASK with EINVAL, so
+ * kevent_mod returned -1, the parent never called job_uncork_fork(),
+ * and the freshly-forked child blocked forever on
+ * read(execspair[1]) waiting for the unblock pipe -- getty never
+ * exec'd, /dev/console never saw a login prompt.
+ *
+ * Define them as 0 instead. Two consequences, both correct:
+ *   - Read-side checks like `if (kev->fflags & NOTE_EXITSTATUS)`
+ *     become always-false, which is the right "FreeBSD's kqueue
+ *     doesn't deliver this detail" semantics.
+ *   - Write-side OR-ing into proc_fflags adds no bits, so
+ *     kevent_mod sees only NOTE_EXIT|NOTE_FORK|NOTE_EXEC -- all
+ *     valid on FreeBSD.
+ */
 #ifndef NOTE_EXITSTATUS
-#define NOTE_EXITSTATUS		0x04000000
+#define NOTE_EXITSTATUS		0
 #endif
 #ifndef NOTE_EXIT_DETAIL
-#define NOTE_EXIT_DETAIL	0x02000000
+#define NOTE_EXIT_DETAIL	0
 #endif
 #ifndef NOTE_EXIT_DECRYPTFAIL
-#define NOTE_EXIT_DECRYPTFAIL	0x00010000
+#define NOTE_EXIT_DECRYPTFAIL	0
 #endif
 #ifndef NOTE_EXIT_MEMORY
-#define NOTE_EXIT_MEMORY	0x00020000
+#define NOTE_EXIT_MEMORY	0
 #endif
 #ifndef NOTE_EXIT_CSERROR
-#define NOTE_EXIT_CSERROR	0x00040000
+#define NOTE_EXIT_CSERROR	0
 #endif
 #ifndef NOTE_EXIT_REPARENTED
-#define NOTE_EXIT_REPARENTED	0x00080000
+#define NOTE_EXIT_REPARENTED	0
 #endif
 
 /*
