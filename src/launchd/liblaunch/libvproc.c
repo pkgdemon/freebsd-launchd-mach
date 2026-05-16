@@ -479,6 +479,35 @@ _vprocmgr_detach_from_console(vproc_flags_t flags __attribute__((unused)))
 vproc_err_t
 _vproc_post_fork_ping(void)
 {
+#ifdef __FreeBSD__
+	/*
+	 * freebsd-launchd-mach iter 17 (2026-05-16): no-op on FreeBSD.
+	 *
+	 * The Apple implementation does a synchronous MIG RPC
+	 * (vproc_mig_post_fork_ping) to launchd over bootstrap_port to
+	 * register the post-fork child and exchange an audit session
+	 * port. PID-1 launchd's MIG demux on FreeBSD does not yet
+	 * service this RPC, so the call blocks the freshly-forked child
+	 * indefinitely -- it never reaches job_start_child, never execs
+	 * its program (getty/etc.), and the parent's job-spawn pipeline
+	 * silently stalls. PID-1 boot symptom prior to this fix
+	 * (iters 11-16): plist scanned, dispatch ok, one runtime_fork
+	 * sysctlbyname-in-child trace, then 8 minutes of silence with
+	 * no login prompt.
+	 *
+	 * FreeBSD has no audit-session subsystem so the session-join
+	 * the Apple path performs is also moot. Returning NULL means
+	 * "post-fork hook succeeded"; the caller in core.c at line 4444
+	 * proceeds to runtime_close(execspair[0]) and read(execspair[1])
+	 * for the parent's job_uncork_fork write, then job_start_child
+	 * for the exec.
+	 *
+	 * When PID-1 launchd's MIG service is fully wired (post-pid1
+	 * Mach IPC work), this stub can be removed and the real
+	 * vproc_mig_post_fork_ping call restored.
+	 */
+	return NULL;
+#else
 	mach_port_t session = MACH_PORT_NULL;
 	kern_return_t kr = vproc_mig_post_fork_ping(bootstrap_port, mach_task_self(), &session);
 	if (kr) {
@@ -491,6 +520,7 @@ _vproc_post_fork_ping(void)
 	}
 
 	return NULL;
+#endif
 }
 
 vproc_err_t
