@@ -1,0 +1,31 @@
+/*
+ * freebsd-launchd-mach (2026-05-15)
+ *
+ * Replacement for upstream icu_packaged_data.cpp's giant
+ * uint8_t[] = { ...40M hex literals... } initializer that
+ * peaks at 6-10 GB resident in clang's parser.
+ *
+ * Strategy: ship the same bytes via the assembler's .incbin,
+ * which reads a binary file directly into the .o data section
+ * with no AST overhead. Compile peak: ~150 MB (just the
+ * assembler's working set).
+ *
+ * The path below (@ICU_PACKAGED_BIN_PATH@) is substituted by
+ * configure_file at CMake configure time. The .bin itself is
+ * generated at build time by freebsd_decode_icu_chunks against
+ * the 4 hex chunk files.
+ *
+ * Portable across all ELF targets (x86_64, aarch64, riscv64,
+ * etc.) -- only target-agnostic GAS pseudo-ops are used. Not
+ * portable to Mach-O (macOS) or COFF (Windows), but those
+ * aren't in scope.
+ */
+
+	.section .rodata
+	.balign 8
+	.globl U_ICUDATA_ENTRY_POINT
+	.type U_ICUDATA_ENTRY_POINT, @object
+U_ICUDATA_ENTRY_POINT:
+	.incbin "@ICU_PACKAGED_BIN_PATH@"
+.L_freebsd_icu_packaged_data_end:
+	.size U_ICUDATA_ENTRY_POINT, .L_freebsd_icu_packaged_data_end - U_ICUDATA_ENTRY_POINT

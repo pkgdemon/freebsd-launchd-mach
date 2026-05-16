@@ -735,17 +735,13 @@ cmake -G Ninja /tmp/swift-foundation-icu \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_BUILD_TYPE=Release
-# -j1 cap: icu_packaged_data.cpp peaks at 6-10 GB resident (200 MB
-# of #include'd hex literals -> giant AST). Even with -j2, ninja's
-# non-deterministic scheduler sometimes pairs the giant TU with
-# another medium TU and combined peak exceeds 8 GB -> OOM kill.
-# -j1 serializes everything: only one compile in flight, peak RAM
-# = single-TU peak. Slowest possible build but deterministic on
-# the 8 GB VM (per build-on-low-end-systems rule).
-# If this still OOMs, the proper fix is .incbin restructure of
-# icu_packaged_data.cpp (decode hex to binary, link .o via
-# objcopy / .S incbin -> drops compile peak to ~150 MB).
-ninja -j 1
+# Default ninja parallelism is fine now that the
+# icu_packaged_data.cpp giant TU is replaced by a .incbin .S file
+# (see icuSources/common/CMakeLists.txt's freebsd-launchd-mach
+# patch). Compile peak across all CC/CXX TUs is back to typical
+# ICU-source sizes (a few hundred MB each), comfortable on the
+# 8 GB VM with default -jN.
+ninja
 ninja install
 CHROOT_ICU
 

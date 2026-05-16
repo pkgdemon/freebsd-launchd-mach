@@ -14,13 +14,15 @@
 
 cmake_minimum_required(VERSION 3.24)
 
-# freebsd-launchd-mach patch (2026-05-15): drop Swift from LANGUAGES.
-# Upstream targets the swift-foundation package; we build only the C/C++
-# library for libCoreFoundation to link against. The FreeBSD chroot has
-# no Swift toolchain, and CMake's project() probes every declared
-# language at configure time -> failure if Swift is listed but absent.
+# freebsd-launchd-mach patch (2026-05-15): drop Swift from LANGUAGES,
+# add C. Upstream targets the swift-foundation package and only needs
+# CXX + Swift; we don't have Swift on the FreeBSD chroot, and we add
+# C so the freebsd_icu_packaged_data.S incbin replacement (in
+# icuSources/common/CMakeLists.txt) can be processed by the C
+# compiler driver (clang -c file.S -> preprocess + assemble). The
+# decoder helper executable freebsd_decode_icu_chunks is also C.
 project(SwiftFoundationICU
-    LANGUAGES CXX)
+    LANGUAGES C CXX)
 
 option(BUILD_SHARED_LIBS "build shared libraries" ON)
 

@@ -41,7 +41,13 @@ target_sources(_FoundationICU
         errorcode.cpp
         filteredbrk.cpp
         filterednormalizer2.cpp
-        icu_packaged_data.cpp
+        # freebsd-launchd-mach patch (2026-05-15): icu_packaged_data.cpp
+        # is removed from sources and replaced by freebsd_icu_packaged_data.S
+        # (added at the end of this file). The original .cpp #includes 4 x
+        # 50 MB hex chunk files into one TU, peaking at 6-10 GB resident
+        # in clang's parser. The .S variant uses .incbin to embed a binary
+        # blob (decoded from the same chunks at build time), peaking at
+        # ~150 MB. See the assembler file's header comment for details.
         icudataver.cpp
         icuplug.cpp
         loadednormalizer2impl.cpp
@@ -230,3 +236,67 @@ target_sources(_FoundationICU
         uvectr32.cpp
         uvectr64.cpp
         wintz.cpp)
+
+# ============================================================================
+# freebsd-launchd-mach patch (2026-05-15): incbin-based ICU data wiring
+# ============================================================================
+#
+# Replaces upstream's icu_packaged_data.cpp (a giant uint8_t[] = { ...40M
+# hex literals... } that peaks at 6-10 GB resident in clang's parser).
+#
+# Pipeline:
+#   1. Build freebsd_decode_icu_chunks (tiny C executable). It reads the
+#      4 hex .inc.h files and writes a 32 MB binary blob.
+#   2. Run the decoder at build time -> ${CMAKE_CURRENT_BINARY_DIR}/icu_packaged_main_data.bin
+#   3. configure_file the .S template, substituting the .bin path.
+#   4. Add the generated .S to _FoundationICU's sources. The assembler's
+#      .incbin reads the .bin directly into the output .o data section.
+#      Compile peak: ~150 MB.
+#
+# Why: the original .cpp build is structurally infeasible on the project's
+# 8 GB CI VM (build-on-low-end-systems rule pinned at .github/workflows/
+# build.yml mem: 8192). Even -j 1 OOM-killed at clang's parse phase --
+# the 200 MB source TU's AST exceeds 8 GB regardless of optimization
+# level or concurrency.
+#
+# Portability: only target-agnostic GAS pseudo-ops are used in the .S
+# template, so it works on any ELF target (x86_64, aarch64, riscv64,
+# etc.). Not portable to Mach-O (macOS) or COFF (Windows), but those
+# aren't in scope.
+
+# Step 1: build the chunk decoder host-side helper
+add_executable(freebsd_decode_icu_chunks freebsd_decode_icu_chunks.c)
+
+# Step 2: emit the binary blob from the 4 hex chunks
+set(_freebsd_icu_packaged_bin "${CMAKE_CURRENT_BINARY_DIR}/icu_packaged_main_data.bin")
+add_custom_command(
+    OUTPUT "${_freebsd_icu_packaged_bin}"
+    COMMAND $<TARGET_FILE:freebsd_decode_icu_chunks>
+            "${CMAKE_CURRENT_SOURCE_DIR}/icu_packaged_main_data.0.inc.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/icu_packaged_main_data.1.inc.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/icu_packaged_main_data.2.inc.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/icu_packaged_main_data.3.inc.h"
+            "${_freebsd_icu_packaged_bin}"
+    DEPENDS freebsd_decode_icu_chunks
+            "${CMAKE_CURRENT_SOURCE_DIR}/icu_packaged_main_data.0.inc.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/icu_packaged_main_data.1.inc.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/icu_packaged_main_data.2.inc.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/icu_packaged_main_data.3.inc.h"
+    COMMENT "Decoding ICU hex chunks to binary blob (replaces icu_packaged_data.cpp)"
+    VERBATIM)
+
+# Step 3: substitute the .bin path into the .S template
+set(ICU_PACKAGED_BIN_PATH "${_freebsd_icu_packaged_bin}")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/freebsd_icu_packaged_data.S.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.S"
+    @ONLY)
+
+# Step 4: add generated .S to the library + tell CMake it depends on the .bin
+set_source_files_properties(
+    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.S"
+    PROPERTIES
+        OBJECT_DEPENDS "${_freebsd_icu_packaged_bin}"
+        LANGUAGE C)
+target_sources(_FoundationICU PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/freebsd_icu_packaged_data.S")
