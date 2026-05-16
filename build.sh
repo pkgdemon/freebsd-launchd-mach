@@ -678,26 +678,12 @@ chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
 echo "==> Phase I1b: liblaunch built + installed"
 
 #
-# 3n. Phase I1c — build the launchd daemon (src/launchd/src).
-#     Seven hand-written TUs (launchd.c core.c runtime.c ipc.c log.c
-#     kill2.c ktrace.c) plus the MIG stubs from step 3l. Host build
-#     via bsd.prog.mk; MIGOUT points at the I1a output, SYSROOT at the
-#     in-build rootfs (liblaunch / libxpc / libdispatch / libsystem_
-#     kernel + their headers).
+# 3n. Phase I1c — launchd daemon moved AFTER libCoreFoundation step
+#     (now at 3p1, see below). The daemon's launchd_plist_scan.c
+#     links libCoreFoundation + lib_FoundationICU to parse
+#     /System/Library/LaunchDaemons at PID-1 boot, so CF must be
+#     installed in SYSROOT before launchd compiles.
 #
-#     Install: /sbin/launchd — Apple-Unix path, matches the
-#     install-layout spike. PID-1 promotion is a separate later step;
-#     the binary location is the same whether init runs it or it IS
-#     init.
-#
-echo "==> Phase I1c: building launchd (src/launchd/src)"
-make -C "$ROOT/src/launchd/src" \
-    DESTDIR="$WORK/rootfs" \
-    MIGOUT="$MIG_OUT" \
-    SYSROOT="$WORK/rootfs" \
-    all install
-ls -lh "$WORK/rootfs/sbin/launchd"
-echo "==> Phase I1c: launchd built + installed"
 
 #
 # 3o. build swift-foundation-icu (src/swift-foundation-icu) -> libicucore.so.
@@ -825,6 +811,31 @@ chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_corefoundation \
     | grep -q "libCoreFoundation.so.* => /usr/lib/libsystem/" \
     || { echo "FAIL: ldd doesn't resolve test_corefoundation to /usr/lib/libsystem/libCoreFoundation.so"; exit 1; }
 echo "==> test_corefoundation built + ldd verified"
+
+#
+# 3p1. Phase I1c (moved): build the launchd daemon (src/launchd/src).
+#      Was at step 3n earlier in the pipeline; moved here because
+#      launchd_plist_scan.c now links libCoreFoundation +
+#      lib_FoundationICU to parse /System/Library/LaunchDaemons at
+#      PID-1 boot. CF must be installed in SYSROOT before launchd
+#      compiles.
+#
+#      Seven hand-written TUs (launchd.c core.c runtime.c ipc.c log.c
+#      kill2.c ktrace.c) plus launchd_plist_scan.c plus the MIG stubs
+#      from step 3l. Host build via bsd.prog.mk; MIGOUT points at the
+#      I1a output, SYSROOT at the in-build rootfs.
+#
+#      Install: /sbin/launchd — Apple-Unix path, matches the
+#      install-layout spike.
+#
+echo "==> Phase I1c: building launchd (src/launchd/src) [post-CF]"
+make -C "$ROOT/src/launchd/src" \
+    DESTDIR="$WORK/rootfs" \
+    MIGOUT="$MIG_OUT" \
+    SYSROOT="$WORK/rootfs" \
+    all install
+ls -lh "$WORK/rootfs/sbin/launchd"
+echo "==> Phase I1c: launchd built + installed"
 
 #
 # 3q. build launchctl (src/launchd/support/launchctl.c).
