@@ -198,14 +198,16 @@ ls -lh "$WORK/rootfs/usr/lib/system/libsystem_kernel.so" \
        "$WORK/rootfs/usr/include/mach/mach_traps.h" \
        "$WORK/rootfs/usr/libdata/pkgconfig/libsystem_kernel.pc"
 
-# ldconfig hint so rtld finds libsystem_kernel.so at runtime. Two parts:
-# (a) /etc/ld-elf.so.conf entry — FreeBSD-base mechanism;
-#     /etc/rc.d/ldconfig reads it at boot and adds the path to
-#     ldconfig's hint set. No /usr/local involvement.
-# (b) ldconfig -m primes /var/run/ld-elf.so.hints inside rootfs.uzip
-#     so the live ISO boots with hints already correct under launchd.
-echo "==> writing ldconfig hint for /usr/lib/system"
-echo "/usr/lib/system" >> "$WORK/rootfs/etc/ld-elf.so.conf"
+# Prime /var/run/ld-elf.so.hints inside rootfs.uzip so a fresh boot
+# already knows about /usr/lib/system. We do NOT register the path in
+# /etc/ld-elf.so.conf -- our binaries (launchd, launchctl, libsystem_*
+# consumers) all bake -Wl,-rpath,/usr/lib/system at link time, matching
+# Apple's macOS convention where LC_RPATH load commands make each
+# binary self-describing and ld-elf.so.conf-style global registries
+# aren't used. The -m primer here only helps any bare dlopen("lib*.so")
+# call that doesn't carry rpath context (e.g. future third-party
+# Apple-stack components we vendor that aren't yet rpath-correct).
+echo "==> priming ldconfig hints for /usr/lib/system"
 chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/system
 
 #
@@ -333,8 +335,6 @@ test -f "$WORK/rootfs/usr/lib/system/libsystem_kernel.so.0" \
     || { echo "FAIL: libsystem_kernel.so.0 (the library binary) missing"; exit 1; }
 test -L "$WORK/rootfs/usr/lib/system/libsystem_kernel.so" \
     || { echo "FAIL: libsystem_kernel.so (dev symlink to .so.0) missing"; exit 1; }
-grep -q '^/usr/lib/system$' "$WORK/rootfs/etc/ld-elf.so.conf" \
-    || { echo "FAIL: /etc/ld-elf.so.conf missing /usr/lib/system"; exit 1; }
 chroot "$WORK/rootfs" ldconfig -r | grep -q libsystem_kernel \
     || { echo "FAIL: ldconfig hints missing libsystem_kernel"; exit 1; }
 chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libmach \
