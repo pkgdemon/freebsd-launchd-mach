@@ -48,7 +48,7 @@ file(COPY
 # freebsd-launchd-mach patch (2026-05-15): use standard CMAKE_INSTALL_*
 # dirs instead of upstream's SwiftPM-style lib/swift/<system>/ nesting.
 # Upstream's layout fits Swift package consumers; we want libicucore at
-# /usr/lib/libsystem/ and headers at /usr/include/ to match CF's
+# /usr/lib/system/ and headers at /usr/include/ to match CF's
 # expected #include <_foundation_unicode/...> resolution and the
 # project's install-layout spike.
 install(TARGETS _FoundationICU

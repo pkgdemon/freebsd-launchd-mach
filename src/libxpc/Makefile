@@ -3,12 +3,12 @@
 # vendored libdispatch for queue/source support. The bootstrap_check_in
 # / bootstrap_look_up dependencies are satisfied by libbootstrap (in
 # src/bootstrap/), which is built into both the daemon and the smoke
-# tests for now and will become a real /usr/lib/libsystem/libbootstrap.so
+# tests for now and will become a real /usr/lib/system/libbootstrap.so
 # once it stabilizes.
 #
 # Naming: matches Apple's libxpc.dylib on macOS so Apple-source code that
 # links -lxpc compiles unchanged. Install path follows the Phase D
-# layout — /usr/lib/libsystem/libxpc.so. Headers at /usr/include/xpc/.
+# layout — /usr/lib/system/libxpc.so. Headers at /usr/include/xpc/.
 #
 # Vendored from ravynOS, which itself imported from NextBSD. Local subr_
 # nvlist.c + subr_nvpair.c carry their own copies of FreeBSD libnv (the
@@ -51,7 +51,7 @@ CFLAGS+=	-I${.CURDIR} -I${.CURDIR}/../bootstrap
 CFLAGS+=	-fblocks
 .if !empty(SYSROOT)
 CFLAGS+=	-I${SYSROOT}${PREFIX}/include
-LDADD+=		-L${SYSROOT}${PREFIX}/lib/libsystem
+LDADD+=		-L${SYSROOT}${PREFIX}/lib/system
 .endif
 NO_MAN=		yes
 WARNS?=		0	# vendored code; don't gate on style warnings
@@ -65,16 +65,16 @@ INCS=		xpc/activity.h \
 		xpc/private.h \
 		xpc/xpc.h
 INCSDIR=	${PREFIX}/include/xpc
-LIBDIR=		${PREFIX}/lib/libsystem
+LIBDIR=		${PREFIX}/lib/system
 
 # Link against libsystem_kernel for Mach trap shims and libdispatch
-# for queue/source primitives. Both are at /usr/lib/libsystem/ per
+# for queue/source primitives. Both are at /usr/lib/system/ per
 # the Phase D layout. -lBlocksRuntime resolves _Block_copy /
 # _NSConcreteStackBlock etc. from -fblocks; -lsbuf resolves the
 # sbuf_* API xpc_misc.c uses for xpc_copy_description. -rpath lets
 # rtld find our libsystem dir at runtime.
 LDADD+=		-lsystem_kernel -ldispatch -lBlocksRuntime -lsbuf -lpthread
-LDADD+=		-Wl,-rpath,${PREFIX}/lib/libsystem
+LDADD+=		-Wl,-rpath,${PREFIX}/lib/system
 
 PREFIX?=	/usr
 

@@ -26,8 +26,8 @@
 # Install: make DESTDIR=/path/to/rootfs install
 #
 # Install layout (per the install-layout spike):
-#   /usr/lib/libsystem/libCoreFoundation.so.6
-#   /usr/lib/libsystem/libCoreFoundation.so  (symlink)
+#   /usr/lib/system/libCoreFoundation.so.6
+#   /usr/lib/system/libCoreFoundation.so  (symlink)
 #   /usr/include/CoreFoundation/*.h
 #
 # Depends at build time on:
@@ -151,8 +151,8 @@ CFLAGS+=	-I${.CURDIR}/internalInclude		# Internal CF headers
 CFLAGS+=	-include ${.CURDIR}/internalInclude/CoreFoundation_Prefix.h
 .if !empty(SYSROOT)
 CFLAGS+=	-I${SYSROOT}/usr/include		# Block.h, dispatch/*, mach/*
-LDADD+=		-L${SYSROOT}/usr/lib/libsystem
-LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
+LDADD+=		-L${SYSROOT}/usr/lib/system
+LDFLAGS+=	-Wl,-rpath,/usr/lib/system
 .endif
 
 # CF build-time defines.
@@ -191,7 +191,7 @@ CFLAGS+=	-fconstant-cfstrings
 # naming; either link line resolves the same body of code.
 LDADD+=		-ldispatch -lBlocksRuntime -lpthread -l_FoundationICU
 
-LIBDIR=		${PREFIX}/lib/libsystem
+LIBDIR=		${PREFIX}/lib/system
 
 PREFIX?=	/usr
 

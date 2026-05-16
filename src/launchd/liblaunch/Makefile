@@ -7,7 +7,7 @@
 #   libbootstrap.c — bootstrap_check_in / _look_up client wrappers
 #
 # Naming: Apple ships this as liblaunch.dylib at /usr/lib/system/. We
-# install liblaunch.so at /usr/lib/libsystem/ per the Phase D layout,
+# install liblaunch.so at /usr/lib/system/ per the Phase D layout,
 # alongside libsystem_kernel / libdispatch / libxpc.
 #
 # Build:   cd src/launchd/liblaunch && make
@@ -70,7 +70,7 @@ CFLAGS+=	-I${MIGOUT}			# job.h, helper.h, helperServer.h
 .endif
 .if !empty(SYSROOT)
 CFLAGS+=	-I${SYSROOT}${PREFIX}/include	# uuid/, dispatch/, xpc/, servers/
-LDADD+=		-L${SYSROOT}${PREFIX}/lib/libsystem
+LDADD+=		-L${SYSROOT}${PREFIX}/lib/system
 .endif
 
 # launchd-842 expects these Apple build-time defines (see xcconfigs in
@@ -79,7 +79,7 @@ LDADD+=		-L${SYSROOT}${PREFIX}/lib/libsystem
 CFLAGS+=	-D__APPLE_API_PRIVATE -DPRIVATE=1
 CFLAGS+=	-fblocks			# libdispatch block syntax
 
-LIBDIR=		${PREFIX}/lib/libsystem
+LIBDIR=		${PREFIX}/lib/system
 
 PREFIX?=	/usr
 

@@ -7,8 +7,8 @@
 # Build:   cd src/libmach && make
 # Install: make DESTDIR=/path/to/rootfs install
 #   produces:
-#     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so
-#     ${DESTDIR}/usr/lib/libsystem/libsystem_kernel.so.0
+#     ${DESTDIR}/usr/lib/system/libsystem_kernel.so
+#     ${DESTDIR}/usr/lib/system/libsystem_kernel.so.0
 #     ${DESTDIR}/usr/include/mach/mach_traps.h
 #     ${DESTDIR}/usr/include/mach/mach_traps_mux.h
 #     ${DESTDIR}/usr/include/mach/mach_port.h
@@ -62,10 +62,10 @@ INCS=		include/mach/mach_traps.h \
 		include/mach/host_reboot.h \
 		include/mach/task_policy.h
 INCSDIR=	${PREFIX}/include/mach
-LIBDIR=		${PREFIX}/lib/libsystem
+LIBDIR=		${PREFIX}/lib/system
 
 # pkg-config file: consumers do `pkg-config --libs libsystem_kernel`
-# and get the right -L and -l flags for /usr/lib/libsystem/.
+# and get the right -L and -l flags for /usr/lib/system/.
 FILES=		libsystem_kernel.pc
 FILESDIR=	${PREFIX}/libdata/pkgconfig
 

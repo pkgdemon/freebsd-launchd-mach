@@ -51,7 +51,7 @@ project's vendor-everything pattern.
 
 | Layer | Size | Location |
 |---|---|---|
-| Library | ~40–50 MB | `/usr/lib/libsystem/libicucore.so` (or whatever the CMake target produces) |
+| Library | ~40–50 MB | `/usr/lib/system/libicucore.so` (or whatever the CMake target produces) |
 | Headers | ~5.5 MB | `/usr/include/_foundation_unicode/` (build-tools only, runtime cost zero) |
 
 Roughly the same as macOS's `/usr/lib/libicucore.dylib`.
@@ -63,7 +63,7 @@ In the FreeBSD chroot via `build.sh`'s libicu step (lands as task ICU.3):
 ```sh
 cmake -G Ninja /tmp/swift-foundation-icu/icuSources \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_INSTALL_LIBDIR=lib/libsystem \
+    -DCMAKE_INSTALL_LIBDIR=lib/system \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS="-DU_DISABLE_RENAMING=1" \
     -DCMAKE_CXX_FLAGS="-DU_DISABLE_RENAMING=1"

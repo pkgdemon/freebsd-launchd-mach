@@ -38,8 +38,8 @@ CFLAGS+=	-I${SYSROOT}/usr/include	# CoreFoundation/, _foundation_unicode/, dispa
 # launchctl.c uses readline only for the interactive `launchctl` REPL;
 # linking libedit's compat layer satisfies the symbols at link time.
 CFLAGS+=	-I${SYSROOT}/usr/include/edit
-LDADD+=		-L${SYSROOT}/usr/lib/libsystem
-LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
+LDADD+=		-L${SYSROOT}/usr/lib/system
+LDFLAGS+=	-Wl,-rpath,/usr/lib/system
 # liblaunch.so has unresolved vproc_mig_* symbols (33 of them, in
 # libvproc.c et al — Apple ships protocol_vproc.defs that MIG-generates
 # the client stubs, but launchd-842 doesn't include it). The launchd

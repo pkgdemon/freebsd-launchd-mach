@@ -80,7 +80,7 @@ with zero kernel patches.
 **Phase D** &mdash; *pkgbase + libsystem layout* &mdash; *done.* Pivoted
 away from gershwin-developer's `/System/Library/Libraries/` for our
 system libraries. Apple-canonical `libsystem_*` layout under
-`/usr/lib/libsystem/` instead, with the
+`/usr/lib/system/` instead, with the
 [install layout spike](https://pkgdemon.github.io/freebsd-libxpc-install-layout-spike.html)
 as the design doc:
 
@@ -90,16 +90,16 @@ as the design doc:
   kerberos / lldb / dtrace / audit (runtime) / hyperv-tools /
   bsdinstall / etc. that base.txz had no opt-out for.
 - **`libmach` &rarr; `libsystem_kernel`.** Renamed and relocated to
-  `/usr/lib/libsystem/libsystem_kernel.so` with `libsystem_kernel.pc`
+  `/usr/lib/system/libsystem_kernel.so` with `libsystem_kernel.pc`
   pkg-config and headers at `/usr/include/mach/`. ldconfig drop-in at
   `/usr/local/libdata/ldconfig/freebsd-launchd-mach` registers
-  `/usr/lib/libsystem` with the runtime linker.
+  `/usr/lib/system` with the runtime linker.
 - **`swift-corelibs-libdispatch` vendored** under
   [`src/libdispatch/`](src/libdispatch/), built in our `build.sh`
   chroot pipeline (cmake/ninja). gershwin-developer's FreeBSD
   performance patch (`event_kevent.c` timer fixes +
   `workqueue.c` loop-var typo) applied as a commit on the vendored
-  tree. Installs as `/usr/lib/libsystem/libdispatch.so`.
+  tree. Installs as `/usr/lib/system/libdispatch.so`.
 - **`Block.h` + `libBlocksRuntime.so`** ship from libdispatch's bundled
   BlocksRuntime sources (Apple compiler-rt &mdash; same upstream as the
   former `FreeBSD-libblocksruntime` pkg, which is dropped). Single
@@ -343,7 +343,7 @@ Sub-phases:
   `.h` stubs. `protocol_jobmgr.defs` is excluded &mdash; it's dead
   code, not in Apple's Xcode build.
 - **I1b &mdash; `liblaunch`** &mdash; *done.* `liblaunch.so.1` builds
-  and installs at `/usr/lib/libsystem/`. The bulk of the work was a
+  and installs at `/usr/lib/system/`. The bulk of the work was a
   header gauntlet: ~14 new `<mach/*>` headers in `libmach`
   (`boolean.h`, `kern_return.h`, `std_types.h`, `ndr.h`, `machine.h`,
   `vm_map.h`, `clock_types.h`, `port.h`, `notify.h`, `mach_types.h`,
@@ -408,7 +408,7 @@ for the full evidence), the answer is:
 **Decision: vendor swift-corelibs CoreFoundation as
 `src/libCoreFoundation/`, build with `DEPLOYMENT_RUNTIME_SWIFT=0`
 (skips the libswiftCore.so dep), install as
-`/usr/lib/libsystem/libCoreFoundation.so.6`.** Same install lane as
+`/usr/lib/system/libCoreFoundation.so.6`.** Same install lane as
 liblaunch / libxpc / libdispatch / libsystem_kernel /
 libBlocksRuntime &mdash; the Apple-libsystem family this project
 ships.
@@ -445,7 +445,7 @@ Plan docs:
   related daemons (asl, notifyd, IPConfiguration, mDNSResponder).
 - [**`freebsd-libxpc-install-layout-spike`**](https://pkgdemon.github.io/freebsd-libxpc-install-layout-spike.html)
   &mdash; per-component install-path decisions across the four
-  candidate layouts (Apple macOS reference, `/usr/lib/libsystem/`,
+  candidate layouts (Apple macOS reference, `/usr/lib/system/`,
   gershwin `/System/Library/`, FreeBSD-base `/usr/lib`). Drives the
   Phase D layout above.
 - [**`freebsd-libxpc-libdispatch-mach-spike`**](https://pkgdemon.github.io/freebsd-libxpc-libdispatch-mach-spike.html)

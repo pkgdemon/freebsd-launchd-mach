@@ -82,8 +82,8 @@ CFLAGS+=	-I${MIGOUT}			# job.h, jobServer.h, mach_excServer.h, ...
 .endif
 .if !empty(SYSROOT)
 CFLAGS+=	-I${SYSROOT}/usr/include	# uuid/, dispatch/, xpc/, servers/
-LDADD+=		-L${SYSROOT}/usr/lib/libsystem
-LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
+LDADD+=		-L${SYSROOT}/usr/lib/system
+LDFLAGS+=	-Wl,-rpath,/usr/lib/system
 # libCoreFoundation.so has internal hidden-visibility references
 # (_CFThreadSetName, _CFGetCurrentDirectory, ...) that FreeBSD's
 # bsd.prog.mk strict --no-allow-shlib-undefined catches at link.

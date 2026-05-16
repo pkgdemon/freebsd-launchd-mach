@@ -179,22 +179,22 @@ ls -lh "$WORK/rootfs/boot/kernel/mach.ko"
 #
 # 3c. build libsystem_kernel (formerly libmach) on the host and install
 #     it into the chroot under the spike's chosen Apple-Libsystem layout:
-#       /usr/lib/libsystem/libsystem_kernel.so + .so.0 sonname symlink
+#       /usr/lib/system/libsystem_kernel.so + .so.0 sonname symlink
 #       /usr/include/mach/mach_traps.h
 #       /usr/libdata/pkgconfig/libsystem_kernel.pc
 #
 echo "==> building libsystem_kernel (src/libmach)"
 # bsd.lib.mk's install doesn't auto-create LIBDIR / INCSDIR / FILESDIR;
-# pre-create them since /usr/lib/libsystem is our convention (not a
+# pre-create them since /usr/lib/system is our convention (not a
 # stock FreeBSD path) so pkgbase doesn't ship it.
-mkdir -p "$WORK/rootfs/usr/lib/libsystem" \
+mkdir -p "$WORK/rootfs/usr/lib/system" \
          "$WORK/rootfs/usr/include/mach" \
          "$WORK/rootfs/usr/libdata/pkgconfig"
 make -C "$ROOT/src/libmach" \
     DESTDIR="$WORK/rootfs" \
     PREFIX=/usr \
     all install
-ls -lh "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
+ls -lh "$WORK/rootfs/usr/lib/system/libsystem_kernel.so" \
        "$WORK/rootfs/usr/include/mach/mach_traps.h" \
        "$WORK/rootfs/usr/libdata/pkgconfig/libsystem_kernel.pc"
 
@@ -204,9 +204,9 @@ ls -lh "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
 #     ldconfig's hint set. No /usr/local involvement.
 # (b) ldconfig -m primes /var/run/ld-elf.so.hints inside rootfs.uzip
 #     so the live ISO boots with hints already correct under launchd.
-echo "==> writing ldconfig hint for /usr/lib/libsystem"
-echo "/usr/lib/libsystem" >> "$WORK/rootfs/etc/ld-elf.so.conf"
-chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+echo "==> writing ldconfig hint for /usr/lib/system"
+echo "/usr/lib/system" >> "$WORK/rootfs/etc/ld-elf.so.conf"
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/system
 
 #
 # 3d. build the libsystem_kernel smoke test binary, install to
@@ -216,8 +216,8 @@ chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
 echo "==> building test_libmach"
 mkdir -p "$WORK/rootfs/usr/tests/freebsd-launchd-mach"
 cc -I"$WORK/rootfs/usr/include" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libmach" \
    "$ROOT/src/mach_kmod/tests/test_libmach.c" \
    -lsystem_kernel
@@ -229,8 +229,8 @@ ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libmach"
 # MACH-PORT-FAIL.
 echo "==> building test_mach_port"
 cc -I"$WORK/rootfs/usr/include" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_mach_port" \
    "$ROOT/src/mach_kmod/tests/test_mach_port.c" \
    -lsystem_kernel
@@ -241,8 +241,8 @@ ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_mach_port"
 # server's port discovery). Failure surfaces as TASK-SPECIAL-PORT-FAIL.
 echo "==> building test_task_special_port"
 cc -I"$WORK/rootfs/usr/include" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_task_special_port" \
    "$ROOT/src/mach_kmod/tests/test_task_special_port.c" \
    -lsystem_kernel
@@ -255,8 +255,8 @@ ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_task_special_port"
 # surfaces in run.sh on regression.
 echo "==> building test_host_bootstrap"
 cc -I"$WORK/rootfs/usr/include" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_host_bootstrap" \
    "$ROOT/src/mach_kmod/tests/test_host_bootstrap.c" \
    -lsystem_kernel
@@ -276,12 +276,12 @@ cp "$ROOT/src/libmach/include/servers/bootstrap.h" \
 # protocol (check_in / look_up round-trip via libbootstrap +
 # bootstrap_server_run in a pthread). libbootstrap.c is linked
 # statically into the test binary for now; Phase G2 promotes it to
-# a real /usr/lib/libsystem/libbootstrap.so once the daemon lands.
+# a real /usr/lib/system/libbootstrap.so once the daemon lands.
 echo "==> building test_bootstrap"
 cc -I"$WORK/rootfs/usr/include" \
    -I"$ROOT/src/bootstrap" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap" \
    "$ROOT/src/bootstrap/tests/test_bootstrap.c" \
    "$ROOT/src/bootstrap/libbootstrap.c" \
@@ -296,8 +296,8 @@ ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap"
 echo "==> building bootstrap_server"
 cc -I"$WORK/rootfs/usr/include" \
    -I"$ROOT/src/bootstrap" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/sbin/bootstrap_server" \
    "$ROOT/src/bootstrap/bootstrap_server.c" \
    "$ROOT/src/bootstrap/libbootstrap.c" \
@@ -311,8 +311,8 @@ ls -lh "$WORK/rootfs/usr/sbin/bootstrap_server"
 echo "==> building test_bootstrap_remote"
 cc -I"$WORK/rootfs/usr/include" \
    -I"$ROOT/src/bootstrap" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap_remote" \
    "$ROOT/src/bootstrap/tests/test_bootstrap_remote.c" \
    "$ROOT/src/bootstrap/libbootstrap.c" \
@@ -325,21 +325,21 @@ ls -lh "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_bootstrap_remote"
 #     instead of producing a broken ISO.
 #
 echo "==> verifying libsystem_kernel install"
-ls -la "$WORK/rootfs/usr/lib/libsystem/" || true
+ls -la "$WORK/rootfs/usr/lib/system/" || true
 # bsd.lib.mk installs .so.0 as the regular file (the actual library
 # binary) and .so as the dev-time symlink pointing to it. Verify both
 # shapes correctly.
-test -f "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so.0" \
+test -f "$WORK/rootfs/usr/lib/system/libsystem_kernel.so.0" \
     || { echo "FAIL: libsystem_kernel.so.0 (the library binary) missing"; exit 1; }
-test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_kernel.so" \
+test -L "$WORK/rootfs/usr/lib/system/libsystem_kernel.so" \
     || { echo "FAIL: libsystem_kernel.so (dev symlink to .so.0) missing"; exit 1; }
-grep -q '^/usr/lib/libsystem$' "$WORK/rootfs/etc/ld-elf.so.conf" \
-    || { echo "FAIL: /etc/ld-elf.so.conf missing /usr/lib/libsystem"; exit 1; }
+grep -q '^/usr/lib/system$' "$WORK/rootfs/etc/ld-elf.so.conf" \
+    || { echo "FAIL: /etc/ld-elf.so.conf missing /usr/lib/system"; exit 1; }
 chroot "$WORK/rootfs" ldconfig -r | grep -q libsystem_kernel \
     || { echo "FAIL: ldconfig hints missing libsystem_kernel"; exit 1; }
 chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libmach \
-    | grep -q "libsystem_kernel.so.0 => /usr/lib/libsystem/" \
-    || { echo "FAIL: ldd doesn't resolve test_libmach to /usr/lib/libsystem/"; exit 1; }
+    | grep -q "libsystem_kernel.so.0 => /usr/lib/system/" \
+    || { echo "FAIL: ldd doesn't resolve test_libmach to /usr/lib/system/"; exit 1; }
 echo "==> libsystem_kernel install verified"
 
 #
@@ -347,8 +347,8 @@ echo "==> libsystem_kernel install verified"
 #     libdispatch + FreeBSD perf patch). cmake/ninja build inside the
 #     chroot using buildpkgs already installed (clang, lld, cmake,
 #     ninja). Installs:
-#       /usr/lib/libsystem/libdispatch.so + .so.0 (the lib)
-#       /usr/lib/libsystem/libBlocksRuntime.so + .so.0 (bundled — replaces
+#       /usr/lib/system/libdispatch.so + .so.0 (the lib)
+#       /usr/lib/system/libBlocksRuntime.so + .so.0 (bundled — replaces
 #         the dropped FreeBSD-libblocksruntime pkg; same upstream Apple
 #         compiler-rt source)
 #       /usr/include/dispatch/*.h
@@ -372,7 +372,7 @@ mkdir -p /tmp/libdispatch-build
 cd /tmp/libdispatch-build
 cmake -G Ninja /tmp/libdispatch \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_INSTALL_LIBDIR=lib/libsystem \
+    -DCMAKE_INSTALL_LIBDIR=lib/system \
     -DINSTALL_DISPATCH_HEADERS_DIR=/usr/include/dispatch \
     -DINSTALL_BLOCK_HEADERS_DIR=/usr/include \
     -DINSTALL_OS_HEADERS_DIR=/usr/include/os \
@@ -397,16 +397,16 @@ echo "==> creating libdispatch / libsystem_dispatch / libsystem_blocks symlinks"
 # Workaround: create .so.0 symlinks pointing at the unversioned file so
 # ldconfig's glob matches. Cleaner long-term fix: patch libdispatch's
 # CMakeLists to set SOVERSION + OUTPUT_NAME=system_dispatch.
-ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/libsystem/libdispatch.so.0"
-ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/libsystem/libBlocksRuntime.so.0"
-ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so"
-ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so.0"
-ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so"
-ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so.0"
+ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/system/libdispatch.so.0"
+ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/system/libBlocksRuntime.so.0"
+ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/system/libsystem_dispatch.so"
+ln -sf libdispatch.so      "$WORK/rootfs/usr/lib/system/libsystem_dispatch.so.0"
+ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/system/libsystem_blocks.so"
+ln -sf libBlocksRuntime.so "$WORK/rootfs/usr/lib/system/libsystem_blocks.so.0"
 
 # Re-prime ldconfig hints now that libdispatch + BlocksRuntime are
-# installed at /usr/lib/libsystem.
-chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+# installed at /usr/lib/system.
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/system
 
 # Cleanup chroot build artifacts.
 rm -rf "$WORK/rootfs/tmp/libdispatch" "$WORK/rootfs/tmp/libdispatch-build"
@@ -417,8 +417,8 @@ rm -rf "$WORK/rootfs/tmp/libdispatch" "$WORK/rootfs/tmp/libdispatch-build"
 #
 echo "==> building test_libdispatch"
 cc -I"$WORK/rootfs/usr/include" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libdispatch" \
    "$ROOT/src/libdispatch-tests/test_libdispatch.c" \
    -ldispatch -lpthread
@@ -428,8 +428,8 @@ echo "==> building test_libdispatch_mach"
 # trap shims the round-trip test uses to allocate a receive port and
 # self-send through the kernel.
 cc -I"$WORK/rootfs/usr/include" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libdispatch_mach" \
    "$ROOT/src/libdispatch-tests/test_libdispatch_mach.c" \
    -ldispatch -lsystem_kernel -lpthread
@@ -438,16 +438,16 @@ cc -I"$WORK/rootfs/usr/include" \
 # 3h. verify libdispatch install shape + ldconfig + ldd resolution.
 #
 echo "==> verifying libdispatch install"
-ls -la "$WORK/rootfs/usr/lib/libsystem/" || true
+ls -la "$WORK/rootfs/usr/lib/system/" || true
 # libdispatch installs unversioned: libdispatch.so is the actual file
 # (no .so.0). Same for libBlocksRuntime.
-test -f "$WORK/rootfs/usr/lib/libsystem/libdispatch.so" \
+test -f "$WORK/rootfs/usr/lib/system/libdispatch.so" \
     || { echo "FAIL: libdispatch.so (the library binary) missing"; exit 1; }
-test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_dispatch.so" \
+test -L "$WORK/rootfs/usr/lib/system/libsystem_dispatch.so" \
     || { echo "FAIL: libsystem_dispatch.so symlink missing"; exit 1; }
-test -f "$WORK/rootfs/usr/lib/libsystem/libBlocksRuntime.so" \
+test -f "$WORK/rootfs/usr/lib/system/libBlocksRuntime.so" \
     || { echo "FAIL: libBlocksRuntime.so missing"; exit 1; }
-test -L "$WORK/rootfs/usr/lib/libsystem/libsystem_blocks.so" \
+test -L "$WORK/rootfs/usr/lib/system/libsystem_blocks.so" \
     || { echo "FAIL: libsystem_blocks.so symlink missing"; exit 1; }
 test -f "$WORK/rootfs/usr/include/Block.h" \
     || { echo "FAIL: /usr/include/Block.h missing (libdispatch should ship it)"; exit 1; }
@@ -456,8 +456,8 @@ test -f "$WORK/rootfs/usr/include/dispatch/dispatch.h" \
 chroot "$WORK/rootfs" ldconfig -r | grep -q libdispatch \
     || { echo "FAIL: ldconfig hints missing libdispatch"; exit 1; }
 chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libdispatch \
-    | grep -q "libdispatch.so => /usr/lib/libsystem/" \
-    || { echo "FAIL: ldd doesn't resolve test_libdispatch to /usr/lib/libsystem/"; exit 1; }
+    | grep -q "libdispatch.so => /usr/lib/system/" \
+    || { echo "FAIL: ldd doesn't resolve test_libdispatch to /usr/lib/system/"; exit 1; }
 echo "==> libdispatch install verified"
 
 #
@@ -472,7 +472,7 @@ echo "==> libdispatch install verified"
 #
 #     Host build via bsd.lib.mk — same pattern as libsystem_kernel.
 #     Install:
-#       /usr/lib/libsystem/libxpc.so + libxpc.so.4 (the lib)
+#       /usr/lib/system/libxpc.so + libxpc.so.4 (the lib)
 #       /usr/include/xpc/{activity,base,connection,debug,endpoint,
 #                         launchd,xpc}.h
 #
@@ -513,18 +513,18 @@ make -C "$ROOT/src/libxpc" \
     PREFIX=/usr \
     SYSROOT="$WORK/rootfs" \
     all install
-ls -lh "$WORK/rootfs/usr/lib/libsystem/libxpc.so" \
+ls -lh "$WORK/rootfs/usr/lib/system/libxpc.so" \
        "$WORK/rootfs/usr/include/xpc/xpc.h"
 
-# Re-prime ldconfig hints now that libxpc is installed at /usr/lib/libsystem.
-chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+# Re-prime ldconfig hints now that libxpc is installed at /usr/lib/system.
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/system
 
 # Verify libxpc install: shape + ldconfig hint + ldd-resolution of
 # its libdispatch / libsystem_kernel deps. Fails fast if missing.
 echo "==> verifying libxpc install"
-test -f "$WORK/rootfs/usr/lib/libsystem/libxpc.so.4" \
+test -f "$WORK/rootfs/usr/lib/system/libxpc.so.4" \
     || { echo "FAIL: libxpc.so.4 missing"; exit 1; }
-test -L "$WORK/rootfs/usr/lib/libsystem/libxpc.so" \
+test -L "$WORK/rootfs/usr/lib/system/libxpc.so" \
     || { echo "FAIL: libxpc.so dev symlink missing"; exit 1; }
 test -f "$WORK/rootfs/usr/include/xpc/xpc.h" \
     || { echo "FAIL: /usr/include/xpc/xpc.h missing"; exit 1; }
@@ -535,20 +535,20 @@ echo "==> libxpc install verified"
 #
 # 3j. build test_libxpc — Phase H2 smoke check. Links libxpc.so so
 #     the in-process xpc_dictionary_* round-trip exercises the
-#     newly-installed library; rpath /usr/lib/libsystem matches the
+#     newly-installed library; rpath /usr/lib/system matches the
 #     pattern used by test_libdispatch and friends.
 #
 echo "==> building test_libxpc"
 cc -I"$WORK/rootfs/usr/include" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_libxpc" \
    "$ROOT/src/libxpc-tests/test_libxpc.c" \
    -lxpc -ldispatch -lsystem_kernel -lpthread
 
 chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_libxpc \
-    | grep -q "libxpc.so.* => /usr/lib/libsystem/" \
-    || { echo "FAIL: ldd doesn't resolve test_libxpc to /usr/lib/libsystem/libxpc.so"; exit 1; }
+    | grep -q "libxpc.so.* => /usr/lib/system/" \
+    || { echo "FAIL: ldd doesn't resolve test_libxpc to /usr/lib/system/libxpc.so"; exit 1; }
 echo "==> test_libxpc built + ldd verified"
 
 #
@@ -661,7 +661,7 @@ ls -la "$MIG_OUT"
 #     wrappers). Host build via bsd.lib.mk, same pattern as
 #     libsystem_kernel. MIGOUT points the build at the I1a stubs.
 #
-#     Install: /usr/lib/libsystem/liblaunch.so + .so.1
+#     Install: /usr/lib/system/liblaunch.so + .so.1
 #     Headers NOT installed yet — deferred to the I1c launchd build,
 #     same way <mach/mach.h> was deferred past the libdispatch build.
 #
@@ -672,9 +672,9 @@ make -C "$ROOT/src/launchd/liblaunch" \
     MIGOUT="$MIG_OUT" \
     SYSROOT="$WORK/rootfs" \
     all install
-ls -lh "$WORK/rootfs/usr/lib/libsystem/liblaunch.so" \
-       "$WORK/rootfs/usr/lib/libsystem/liblaunch.so.1"
-chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+ls -lh "$WORK/rootfs/usr/lib/system/liblaunch.so" \
+       "$WORK/rootfs/usr/lib/system/liblaunch.so.1"
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/system
 echo "==> Phase I1b: liblaunch built + installed"
 
 #
@@ -699,8 +699,8 @@ echo "==> Phase I1b: liblaunch built + installed"
 #     dirs instead of upstream's lib/swift/<system>/ SwiftPM nesting.
 #
 #     Installs:
-#       /usr/lib/libsystem/lib_FoundationICU.so   (the unified library)
-#       /usr/lib/libsystem/libicucore.so          (Apple-canonical alias)
+#       /usr/lib/system/lib_FoundationICU.so   (the unified library)
+#       /usr/lib/system/libicucore.so          (Apple-canonical alias)
 #       /usr/include/_foundation_unicode/*.h      (212 headers)
 #
 #     Plan: pkgdemon.github.io/freebsd-libicu-port-plan.html
@@ -716,7 +716,7 @@ mkdir -p /tmp/swift-foundation-icu-build
 cd /tmp/swift-foundation-icu-build
 cmake -G Ninja /tmp/swift-foundation-icu \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_INSTALL_LIBDIR=lib/libsystem \
+    -DCMAKE_INSTALL_LIBDIR=lib/system \
     -DCMAKE_INSTALL_INCLUDEDIR=include \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
@@ -736,12 +736,12 @@ echo "==> creating libicucore.so alias (Apple-canonical name)"
 # name is _FoundationICU). Apple's macOS ships the same body of code as
 # /usr/lib/libicucore.dylib. Create both names so callers can link with
 # whichever they prefer (-l_FoundationICU or -licucore).
-ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/libsystem/libicucore.so"
-ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/libsystem/libicucore.so.74"
-ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/libsystem/lib_FoundationICU.so.74"
+ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/system/libicucore.so"
+ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/system/libicucore.so.74"
+ln -sf lib_FoundationICU.so "$WORK/rootfs/usr/lib/system/lib_FoundationICU.so.74"
 
 # Re-prime ldconfig hints now that libicucore is installed.
-chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/system
 
 # Cleanup chroot build artifacts.
 rm -rf "$WORK/rootfs/tmp/swift-foundation-icu" "$WORK/rootfs/tmp/swift-foundation-icu-build"
@@ -750,10 +750,10 @@ rm -rf "$WORK/rootfs/tmp/swift-foundation-icu" "$WORK/rootfs/tmp/swift-foundatio
 # 3o-verify. assert libicu install shape + ldd resolution.
 #
 echo "==> verifying libicu install"
-ls -la "$WORK/rootfs/usr/lib/libsystem/" | grep -E 'icu|FoundationICU' || true
-test -f "$WORK/rootfs/usr/lib/libsystem/lib_FoundationICU.so" \
+ls -la "$WORK/rootfs/usr/lib/system/" | grep -E 'icu|FoundationICU' || true
+test -f "$WORK/rootfs/usr/lib/system/lib_FoundationICU.so" \
     || { echo "FAIL: lib_FoundationICU.so (the library binary) missing"; exit 1; }
-test -L "$WORK/rootfs/usr/lib/libsystem/libicucore.so" \
+test -L "$WORK/rootfs/usr/lib/system/libicucore.so" \
     || { echo "FAIL: libicucore.so symlink missing"; exit 1; }
 test -f "$WORK/rootfs/usr/include/_foundation_unicode/uloc.h" \
     || { echo "FAIL: /usr/include/_foundation_unicode/uloc.h missing (CF needs it)"; exit 1; }
@@ -772,7 +772,7 @@ echo "==> libicu install verified"
 #     and 2 Windows-only .c files are dropped from SRCS per the ICU
 #     audit at pkgdemon.github.io/freebsd-libcorefoundation-icu-audit.
 #
-#     Install: /usr/lib/libsystem/libCoreFoundation.so.6 + headers at
+#     Install: /usr/lib/system/libCoreFoundation.so.6 + headers at
 #     /usr/include/CoreFoundation/.
 #
 echo "==> building libCoreFoundation (src/libCoreFoundation)"
@@ -785,15 +785,15 @@ make -C "$ROOT/src/libCoreFoundation" \
     PREFIX=/usr \
     SYSROOT="$WORK/rootfs" \
     all install
-ls -lh "$WORK/rootfs/usr/lib/libsystem/libCoreFoundation.so" \
-       "$WORK/rootfs/usr/lib/libsystem/libCoreFoundation.so.6"
-chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/libsystem
+ls -lh "$WORK/rootfs/usr/lib/system/libCoreFoundation.so" \
+       "$WORK/rootfs/usr/lib/system/libCoreFoundation.so.6"
+chroot "$WORK/rootfs" ldconfig -m /usr/lib /usr/lib/system
 echo "==> libCoreFoundation built + installed"
 
 #
 # 3p. build test_corefoundation — smoke check that exercises CFDictionary
 #     + CFString + CFPropertyList XML/binary round-trip. Links libCore-
-#     Foundation.so.6 from /usr/lib/libsystem; verifies the legacy
+#     Foundation.so.6 from /usr/lib/system; verifies the legacy
 #     refcount path is alive and the plist driver works.
 #
 echo "==> building test_corefoundation"
@@ -802,14 +802,14 @@ echo "==> building test_corefoundation"
 # -fblocks even when the consumer doesn't use blocks itself.
 cc -fblocks \
    -I"$WORK/rootfs/usr/include" \
-   -L"$WORK/rootfs/usr/lib/libsystem" \
-   -Wl,-rpath,/usr/lib/libsystem \
+   -L"$WORK/rootfs/usr/lib/system" \
+   -Wl,-rpath,/usr/lib/system \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_corefoundation" \
    "$ROOT/src/libCoreFoundation-tests/test_corefoundation.c" \
    -lCoreFoundation -ldispatch -lBlocksRuntime -lsystem_kernel -lpthread
 chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_corefoundation \
-    | grep -q "libCoreFoundation.so.* => /usr/lib/libsystem/" \
-    || { echo "FAIL: ldd doesn't resolve test_corefoundation to /usr/lib/libsystem/libCoreFoundation.so"; exit 1; }
+    | grep -q "libCoreFoundation.so.* => /usr/lib/system/" \
+    || { echo "FAIL: ldd doesn't resolve test_corefoundation to /usr/lib/system/libCoreFoundation.so"; exit 1; }
 echo "==> test_corefoundation built + ldd verified"
 
 #
@@ -867,8 +867,8 @@ make -C "$ROOT/src/launchd/support" \
     all install
 ls -lh "$WORK/rootfs/bin/launchctl"
 chroot "$WORK/rootfs" ldd /bin/launchctl \
-    | grep -q "libCoreFoundation.so.* => /usr/lib/libsystem/" \
-    || { echo "FAIL: ldd doesn't resolve launchctl to /usr/lib/libsystem/libCoreFoundation.so"; exit 1; }
+    | grep -q "libCoreFoundation.so.* => /usr/lib/system/" \
+    || { echo "FAIL: ldd doesn't resolve launchctl to /usr/lib/system/libCoreFoundation.so"; exit 1; }
 chroot "$WORK/rootfs" ldd /bin/launchctl \
     | grep -q "lib_FoundationICU.so" \
     || { echo "FAIL: ldd doesn't resolve launchctl to lib_FoundationICU.so"; exit 1; }

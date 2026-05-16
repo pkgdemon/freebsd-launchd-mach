@@ -26,7 +26,7 @@ else
 fi
 
 # 2. userland: libsystem_kernel resolves and Mach traps roundtrip.
-# Proves the migrated /usr/lib/libsystem/libsystem_kernel.so is
+# Proves the migrated /usr/lib/system/libsystem_kernel.so is
 # discoverable via rtld, links into the test binary, and its
 # Mach-trap calls actually return valid ports (post Phase C2 lazy
 # init, all four traps must succeed).
@@ -164,7 +164,7 @@ fi
 
 # 3. userland: libdispatch loads + serial queue executes a sync callback.
 # Baseline check that the vendored swift-corelibs-libdispatch (built
-# in our chroot pipeline, installed to /usr/lib/libsystem/) is loadable
+# in our chroot pipeline, installed to /usr/lib/system/) is loadable
 # via rtld and dispatches a function-pointer callback correctly. The
 # Mach IPC backend test (DISPATCH_SOURCE_TYPE_MACH_RECV) lands in a
 # follow-up commit once event_mach_freebsd.c is wired in.
@@ -299,7 +299,7 @@ if [ ! -x /bin/launchctl ]; then
     exit 1
 fi
 
-# 1. ldd: all deps must resolve via /usr/lib/libsystem (or /lib).
+# 1. ldd: all deps must resolve via /usr/lib/system (or /lib).
 launchctl_ldd=$(ldd /bin/launchctl 2>&1)
 if echo "$launchctl_ldd" | grep -qE 'not found|undefined'; then
     echo "launchctl ldd:"
@@ -312,11 +312,11 @@ fi
 # 2. Spot-check three critical deps actually came from our libsystem
 #    layout (libCoreFoundation, lib_FoundationICU, liblaunch).
 for lib in libCoreFoundation.so lib_FoundationICU.so liblaunch.so; do
-    if ! echo "$launchctl_ldd" | grep -q "$lib.* => /usr/lib/libsystem/"; then
+    if ! echo "$launchctl_ldd" | grep -q "$lib.* => /usr/lib/system/"; then
         echo "launchctl ldd:"
         echo "$launchctl_ldd"
         echo "---"
-        echo "LAUNCHCTL-BUILD-FAIL: $lib not resolved to /usr/lib/libsystem/"
+        echo "LAUNCHCTL-BUILD-FAIL: $lib not resolved to /usr/lib/system/"
         exit 1
     fi
 done
