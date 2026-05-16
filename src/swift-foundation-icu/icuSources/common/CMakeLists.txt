@@ -285,6 +285,17 @@ add_custom_command(
     COMMENT "Decoding ICU hex chunks to binary blob (replaces icu_packaged_data.cpp)"
     VERBATIM)
 
+# Wrap the custom_command's OUTPUT in a custom_target so we can
+# force-order the _FoundationICU compile after the .bin is ready.
+# OBJECT_DEPENDS alone (set on the .c below) didn't trigger the
+# generator in iteration #11 -- the .c compiled first and .incbin
+# failed because the .bin didn't exist yet. add_dependencies on a
+# custom_target wrapping the file gives ninja an unambiguous
+# ordering edge.
+add_custom_target(freebsd_icu_packaged_bin_target
+    DEPENDS "${_freebsd_icu_packaged_bin}")
+add_dependencies(_FoundationICU freebsd_icu_packaged_bin_target)
+
 # Step 3: substitute the .bin path AND the version-suffixed data
 # symbol name into the .S template. U_ICUDATA_ENTRY_POINT is a
 # preprocessor macro that expands to icudt<MAJOR>_dat. We extract
