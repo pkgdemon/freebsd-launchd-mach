@@ -295,20 +295,25 @@ fi
 # the version string. Doesn't require a running launchd (we'd need
 # launchd-as-PID-1 for that, which is a later phase).
 if [ -x /bin/launchctl ]; then
-    out=$(/bin/launchctl version 2>&1)
+    # `launchctl help` is the simplest command that exercises the cmd
+    # dispatch table without any Mach IPC (no launchd running). Apple's
+    # launchd-842 launchctl has no `version` subcommand -- the cmd table
+    # in launchctl.c:232 lists load/unload/start/stop/list/help/etc.
+    out=$(/bin/launchctl help 2>&1)
     rc=$?
-    if [ $rc -eq 0 ]; then
-        echo "LAUNCHCTL-BUILD-OK: $out"
+    # help_cmd returns non-zero in some launchd-842 variants ("usage"
+    # exit). Accept any exit code where 'help' shows up in the output
+    # AND we didn't hit a dynamic-link error.
+    if echo "$out" | grep -q '^usage:\|load \|^Subcommands:' \
+       && ! echo "$out" | grep -q 'ld-elf\|undefined symbol'; then
+        echo "LAUNCHCTL-BUILD-OK: launchctl help printed cmd table (exit=$rc)"
     else
-        # Print diagnostic FIRST so it drains to the serial console
-        # BEFORE the marker triggers boot-test.sh's expect block to
-        # exit and kill qemu (otherwise the diagnostic is lost).
-        echo "launchctl version exit=$rc"
-        echo "launchctl output: $out"
+        echo "launchctl help exit=$rc"
+        echo "launchctl output (first 30 lines):"
+        echo "$out" | head -30
         echo "launchctl ldd:"
         ldd /bin/launchctl 2>&1 || true
         echo "---"
-        # Marker last — expect closes qemu on first match.
         echo "LAUNCHCTL-BUILD-FAIL: see prior 'launchctl ...' lines"
         exit 1
     fi

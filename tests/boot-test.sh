@@ -290,10 +290,10 @@ expect {
         exit 1
     }
     "LAUNCHCTL-BUILD-FAIL" {
-        puts "\nFAIL: /bin/launchctl version failed to exec / link"
+        puts "\nFAIL: /bin/launchctl help failed to exec / link"
         exit 1
     }
-    "LAUNCHCTL-BUILD-OK" { puts "\nOK: /bin/launchctl execs + prints version" }
+    "LAUNCHCTL-BUILD-OK" { puts "\nOK: /bin/launchctl execs + prints help" }
 }
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns
