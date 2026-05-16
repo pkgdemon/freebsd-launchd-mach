@@ -33,6 +33,11 @@ CFLAGS+=	-I${.CURDIR}/../freebsd-shims	# IOKit/, mach-o/, NSSystemDirectories.h,
 CFLAGS+=	-I${.CURDIR}/../../libmach/include	# mach/*
 .if !empty(SYSROOT)
 CFLAGS+=	-I${SYSROOT}/usr/include	# CoreFoundation/, _foundation_unicode/, dispatch/, xpc/, ...
+# libedit's readline-compatible API. FreeBSD base ships libedit with a
+# <readline/readline.h> header at /usr/include/edit/readline/readline.h.
+# launchctl.c uses readline only for the interactive `launchctl` REPL;
+# linking libedit's compat layer satisfies the symbols at link time.
+CFLAGS+=	-I${SYSROOT}/usr/include/edit
 LDADD+=		-L${SYSROOT}/usr/lib/libsystem
 LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
 .endif
@@ -55,7 +60,8 @@ CFLAGS+=	-fconstant-cfstrings		# CFSTR() literal -> CFStringRef
 # (libicucore.so symlink would also work).
 LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel \
 		-lCoreFoundation -l_FoundationICU \
-		-lpthread -lutil -lBlocksRuntime
+		-lpthread -lutil -lBlocksRuntime \
+		-ledit		# readline-compat layer for the interactive REPL
 
 BINDIR=		/bin
 

@@ -42,10 +42,11 @@ typedef int32_t IOReturn;
 
 /* Wait-time spec used by IOKitWaitQuiet. macOS struct mach_timespec_t.
  * launchctl only ever passes a pointer to a stack value; the kext-quiet
- * stub doesn't consume it, so an opaque struct is fine. */
+ * stub doesn't consume it, so an opaque struct is fine. Use plain int
+ * to avoid pulling in <mach/clock_types.h> (clock_res_t lives there). */
 typedef struct {
         unsigned int    tv_sec;
-        clock_res_t     tv_nsec;
+        int             tv_nsec;
 } freebsd_mach_timespec_t;
 #ifndef mach_timespec_t
 #define mach_timespec_t freebsd_mach_timespec_t
