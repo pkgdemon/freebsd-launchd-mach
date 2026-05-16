@@ -188,7 +188,21 @@ launchd_runtime_init(void)
 
 	os_assert_zero(mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_PORT_SET, &demand_port_set));
 	os_assert_zero(mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_PORT_SET, &ipc_port_set));
-	posix_assert_zero(kevent_mod(demand_port_set, EVFILT_MACHPORT, EV_ADD, 0, 0, &kqmportset_callback));
+	/*
+	 * freebsd-launchd-mach patch (2026-05-16): soft-fail
+	 * EVFILT_MACHPORT registration. FreeBSD's kqueue filter table
+	 * is sized at EVFILT_SYSCOUNT == 13; mach.ko cannot register
+	 * EVFILT_MACHPORT (slot -14) without a FreeBSD kernel patch,
+	 * which the project's no-kernel-patches rule disallows.
+	 * Without this filter, launchd loses demand-launch (start a
+	 * service when a message hits its port). All RunAtLoad +
+	 * KeepAlive daemons (including org.freebsd.getty) still work.
+	 * Real fix: route Mach receive via libdispatch sources, or
+	 * land a FreeBSD-base patch to bump EVFILT_SYSCOUNT.
+	 */
+	if (kevent_mod(demand_port_set, EVFILT_MACHPORT, EV_ADD, 0, 0, &kqmportset_callback) == -1) {
+		launchd_syslog(LOG_NOTICE, "kevent_mod EVFILT_MACHPORT failed (%d); demand-launch disabled, RunAtLoad/KeepAlive daemons unaffected", errno);
+	}
 
 	os_assert_zero(launchd_mport_create_recv(&launchd_internal_port));
 	os_assert_zero(launchd_mport_make_send(launchd_internal_port));
