@@ -17,6 +17,13 @@
 # libldns, libdwarf, libevent1, librpcsec_gss, libipt, libcuse, libvgl,
 # libvmmapi, libbegemot, libbsdstat, libpathconv, librss, fwget, ctf,
 # ccdconfig, freebsd-cert, efi-tools — these are the ISO-size savings.
+#
+# Removed 2026-05-16 (post Phase I3 PID-1 launchd boot to login):
+# rc (launchd replaces /etc/rc), devd + devmatch (hotplug only, kernel
+# does the initial probe; notifyd will replace eventually), ssh
+# (defer to Apple openssh via launchd plist later), resolvconf
+# (configd will handle DNS resolver state), syslogd (ASL will replace),
+# libthread_db (gdb-only), libmagic (file(1)-only).
 
 # ---- bootloader + kernel ----
 FreeBSD-bootloader
@@ -25,22 +32,18 @@ FreeBSD-kernel-generic
 # ---- /sbin/init + boot ----
 # rescue: /init.sh shebangs /rescue/sh and uses /rescue/{mount,mdconfig,
 #   chroot,kldload,init} pre-pivot.
-# runtime: /sbin/init, /sbin/halt, /sbin/reboot, basic boot scripts.
-# rc: /etc/rc* — stock /sbin/init runs these at multi-user.
+# runtime: /sbin/halt, /sbin/reboot, basic boot binaries, plus the
+#   /sbin/init we *don't* use (init.sh exec's /sbin/launchd directly,
+#   bypassing init entirely -- see ramdisk/init.sh comment block).
+#   Also ships /usr/libexec/getty, /usr/bin/login, /bin/sh.
 FreeBSD-rescue
 FreeBSD-runtime
-FreeBSD-rc
 
 # ---- core libc + base userland ----
 FreeBSD-clibs
 FreeBSD-utilities
 FreeBSD-csh
 FreeBSD-vi
-
-# Stock /sbin/init runs rc which expects devd to handle hardware events.
-# Will be droppable once Phase D replaces /sbin/init with launchd.
-FreeBSD-devd
-FreeBSD-devmatch
 
 # Console keymap data (loaded by vt(4)).
 FreeBSD-vt-data
@@ -55,9 +58,8 @@ FreeBSD-geom
 FreeBSD-mtree
 
 # ---- network ----
-FreeBSD-ssh
-FreeBSD-resolvconf
-FreeBSD-syslogd
+# (Empty post-2026-05-16: FreeBSD-ssh, -resolvconf, -syslogd removed;
+# the Apple stack replaces each.)
 
 # ---- pkg + fetch (chroot still installs ports pkglist.txt + buildpkgs.txt
 #      via in-chroot `pkg bootstrap`; it needs pkg-bootstrap and fetch).
@@ -93,11 +95,9 @@ FreeBSD-pam
 # Apple compiler-rt, same source FreeBSD-libblocksruntime is built
 # from). See libdispatch+mach spike §6.2 + install layout spike §15.
 FreeBSD-libcasper
-FreeBSD-libthread_db
 # Note: there is no FreeBSD-libcompiler_rt runtime pkg — only the -dev
 # variant. The runtime libcompiler_rt.so is bundled in FreeBSD-clibs.
 FreeBSD-libexecinfo
-FreeBSD-libmagic
 
 # ---- locale / timezone ----
 # zoneinfo: many libs misbehave without /usr/share/zoneinfo/UTC.
