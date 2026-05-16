@@ -266,6 +266,24 @@ mach_msg_send(
 	MDPRINTF(("send to remote port %d notify %d id %d name %s\n", (int)kmsg->ikm_header->msgh_remote_port,
 			  notify, kmsg->ikm_header->msgh_id, curproc->p_comm));
 
+	/*
+	 * freebsd-launchd-mach patch (2026-05-16): early MACH_PORT_NULL
+	 * fast-path. Userland sending to a NULL destination port (e.g.
+	 * launchctl-842's startup vproc_swap_integer(NULL, ...) when
+	 * bootstrap_port hasn't been set up pre-PID-1) was hanging in
+	 * userland's mach_msg(2). ipc_kmsg_copyin DOES emit
+	 * MACH_SEND_INVALID_DEST via the invalid_dest label, but
+	 * something in the copyin/copyout cycle for the COMBINED
+	 * MACH_SEND_MSG | MACH_RCV_MSG case appears to short-circuit
+	 * incorrectly. Bail before ipc_kmsg_copyin so the trap
+	 * unambiguously returns MACH_SEND_INVALID_DEST.
+	 * See memory: mach-msg-send-to-null-port-hangs.
+	 */
+	if (kmsg->ikm_header->msgh_remote_port == MACH_PORT_NULL) {
+		ikm_free(kmsg);
+		return MACH_SEND_INVALID_DEST;
+	}
+
 	mr = ipc_kmsg_copyin(kmsg, space, map, MACH_PORT_NAME_NULL);
 	if (mr != MACH_MSG_SUCCESS) {
 		ikm_free(kmsg);
