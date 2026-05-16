@@ -14,6 +14,35 @@
 #ifndef _FREEBSD_LAUNCHD_MACH_LAUNCHCTL_COMPAT_H_
 #define _FREEBSD_LAUNCHD_MACH_LAUNCHCTL_COMPAT_H_
 
+/* sys/wait.h
+ *   launchctl.c uses WIFEXITED, WIFSIGNALED, WEXITSTATUS, WTERMSIG,
+ *   waitpid in 8+ sites without including <sys/wait.h>. On macOS the
+ *   header gets pulled in transitively via <sys/types.h> or similar;
+ *   FreeBSD requires explicit inclusion. Adding it here keeps
+ *   launchctl.c source unchanged.
+ */
+#include <sys/wait.h>
+
+/* mach/task.h task_for_pid()
+ *   launchctl.c:3591 uses task_for_pid() to translate a pid into the
+ *   target task port for a Mach trap on the named process. Apple's
+ *   Mach implements this; our libmach doesn't (and the underlying
+ *   trap requires task-for-pid entitlements on macOS even there).
+ *   Stub returns KERN_FAILURE so the caller's KERN_SUCCESS check
+ *   fails and the function bails. Inline static so each TU that
+ *   includes this header gets a private definition; no link conflict.
+ */
+#include <mach/mach_types.h>
+#include <mach/kern_return.h>
+static inline kern_return_t
+task_for_pid(mach_port_name_t target_tport __attribute__((unused)),
+    int pid __attribute__((unused)),
+    mach_port_name_t *t)
+{
+        if (t != NULL) *t = MACH_PORT_NULL;
+        return KERN_FAILURE;
+}
+
 /* _PATH_UTMPX (line 2441 in launchctl.c)
  *   touch_file(_PATH_UTMPX, DEFFILEMODE) — bumps the utmpx login
  *   record at boot. FreeBSD's <paths.h> doesn't define _PATH_UTMPX
