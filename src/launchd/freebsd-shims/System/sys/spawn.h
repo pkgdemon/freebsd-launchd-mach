@@ -19,7 +19,9 @@
 
 #include <sys/types.h>
 #include <stdint.h>
-#include <spawn.h>		/* posix_spawnattr_t (FreeBSD base) */
+#include <errno.h>
+#include <unistd.h>
+#include <spawn.h>		/* posix_spawnattr_t, posix_spawn (FreeBSD base) */
 #include <mach/machine.h>	/* cpu_type_t */
 
 /*
@@ -133,5 +135,92 @@ posix_spawnattr_setcpumonitor_default(posix_spawnattr_t *attr)
 	(void)attr;
 	return 0;
 }
+
+/*
+ * posix_spawn / posix_spawnp wrappers that emulate Apple's
+ * POSIX_SPAWN_SETEXEC.
+ *
+ * Apple semantic of POSIX_SPAWN_SETEXEC: "do not fork; replace the
+ * calling process with the new program." launchd's job_start_child
+ * sets this flag unconditionally and runs posix_spawn from the
+ * already-forked child of runtime_fork(), so the child becomes the
+ * job's program in-place. The PID launchd watches via EVFILT_PROC
+ * is the same one that ends up running getty/etc.
+ *
+ * FreeBSD's libc posix_spawn has no SETEXEC equivalent and its
+ * POSIX_SPAWN_VALID_FLAGS is 0x3F -- our shim's SETEXEC bit 0x40
+ * is outside that mask, so FreeBSD either rejects the call with
+ * EINVAL or silently ignores SETEXEC and fork+execs. Either way
+ * the runtime_fork child is *not* replaced by getty: with EINVAL
+ * it _exit(errno)s without ever exec'ing; with silent-ignore it
+ * spawns a *grandchild* getty and then _exit(0)s itself, leaving
+ * launchd's EVFILT_PROC watching the dead middle process while the
+ * grandchild orphan reparents to PID 1 (launchd) anonymously.
+ *
+ * PID-1 launchd boot symptom that drove this fix (iter 13): the
+ * com.apple.getty.plist job is loaded, dispatched -> ok, the parent
+ * forks (one sysctlbyname-in-child trace at runtime.c:719) -- then
+ * 8 minutes of silence, no login: prompt. The exec is what's
+ * missing.
+ *
+ * Fix: intercept posix_spawn / posix_spawnp. If SETEXEC is set in
+ * the attrs, call execve / execvp directly so the current process
+ * is replaced. Otherwise pass through to libc's real posix_spawn.
+ *
+ * The static-inline definitions are parsed before the #define
+ * macros below, so `posix_spawn(...)` inside the wrapper body
+ * resolves to libc's real symbol declared by <spawn.h>. Subsequent
+ * callers (launchd's core.c) get the macro substitution and reach
+ * the wrappers.
+ *
+ * Side note: launchd captures psf = posix_spawn or posix_spawnp into
+ * a function pointer (core.c:4747). After macro substitution this
+ * becomes psf = freebsd_shim_posix_spawn -- still a valid function
+ * symbol, no breakage.
+ */
+static __inline int
+freebsd_shim_posix_spawn(pid_t *pid, const char *path,
+    const posix_spawn_file_actions_t *fa,
+    const posix_spawnattr_t *sa,
+    char *const argv[], char *const envp[])
+{
+	short flags = 0;
+	if (sa != NULL) {
+		(void)posix_spawnattr_getflags(sa, &flags);
+	}
+	if (flags & POSIX_SPAWN_SETEXEC) {
+		(void)execve(path, argv, envp);
+		return errno;	/* execve only returns on failure */
+	}
+	return posix_spawn(pid, path, fa, sa, argv, envp);
+}
+
+static __inline int
+freebsd_shim_posix_spawnp(pid_t *pid, const char *file,
+    const posix_spawn_file_actions_t *fa,
+    const posix_spawnattr_t *sa,
+    char *const argv[], char *const envp[])
+{
+	short flags = 0;
+	if (sa != NULL) {
+		(void)posix_spawnattr_getflags(sa, &flags);
+	}
+	if (flags & POSIX_SPAWN_SETEXEC) {
+		/*
+		 * FreeBSD has no execvpe (GNU extension). launchd always
+		 * passes the process's environ as envp at the spawn site
+		 * (core.c:4753), and the child inherits environ from the
+		 * parent across runtime_fork, so execvp -- which uses the
+		 * child's environ implicitly -- produces the same result.
+		 */
+		(void)envp;
+		(void)execvp(file, argv);
+		return errno;
+	}
+	return posix_spawnp(pid, file, fa, sa, argv, envp);
+}
+
+#define posix_spawn	freebsd_shim_posix_spawn
+#define posix_spawnp	freebsd_shim_posix_spawnp
 
 #endif /* _FREEBSD_SHIM_SYSTEM_SYS_SPAWN_H_ */
