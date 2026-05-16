@@ -1716,7 +1716,15 @@ static void _CFRelease(CFTypeRef CF_RELEASES_ARGUMENT cf) {
             allocator = CFGetAllocator(cf);
             usesSystemDefaultAllocator = _CFAllocatorIsSystemDefault(allocator);
 
-            if (__kCFAllocatorTypeID_CONST != __CFGenericTypeID_inline(cf)) {
+            // freebsd-launchd-mach patch (2026-05-15): upstream references
+            // __kCFAllocatorTypeID_CONST here, a symbol that is never
+            // defined anywhere in swift-corelibs-foundation's CF source.
+            // Looks like dead code from an old pattern (a static var that
+            // held the CFAllocator type ID, set at runtime registration).
+            // The check is "is this CF object an allocator?" — use the
+            // enum value directly. _kCFRuntimeIDCFAllocator = 2 in
+            // CFRuntime_Internal.h.
+            if (_kCFRuntimeIDCFAllocator != __CFGenericTypeID_inline(cf)) {
                 allocatorToRelease = (CFAllocatorRef _Nonnull)__CFGetAllocator(cf);
             }
 	}
