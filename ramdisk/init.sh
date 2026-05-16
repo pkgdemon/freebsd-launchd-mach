@@ -99,11 +99,15 @@ if [ "$$" = "1" ]; then
     # doesn't exist) and bombs out to single-user mode. Same fix as the
     # fallback path below uses.
     #
-    # Phase D will replace /sbin/init with /sbin/launchd once Apple's
-    # launchd is in the build.
+    # Phase D (2026-05-16): swap /sbin/init for /sbin/launchd as PID 1.
+    # launchd takes over the full init role -- mounts, getty spawning
+    # via LaunchDaemons plists (org.freebsd.getty), service supervision.
+    # Stock FreeBSD rc.d is bypassed; everything goes through plists at
+    # /System/Library/LaunchDaemons/. Iterate boot-test failures until
+    # launchd + getty plist combo brings up login.
     kenv -u init_script 2>/dev/null || true
     kenv -u init_shell  2>/dev/null || true
-    exec /rescue/chroot /sysroot /sbin/init "$@"
+    exec /rescue/chroot /sysroot /sbin/launchd "$@"
 fi
 
 # Fallback path: we're a child of /rescue/init via init_script. Set

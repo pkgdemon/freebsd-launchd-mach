@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  org.freebsd.getty.plist — freebsd-launchd-mach (2026-05-16)
+
+  Spawns FreeBSD's getty(8) on the serial console (ttyu0 — qemu's
+  -serial stdio target, and the laptop/desktop UART line). getty
+  prompts for login; login(1) authenticates against pwd.db; spawns
+  the user's shell.
+
+  RunAtLoad+KeepAlive means launchd starts getty at PID-1 init and
+  respawns it whenever it exits (after a login session ends, or if
+  getty crashes). This is the equivalent of FreeBSD's /etc/ttys
+  ttyu0 entry "Pc" "/usr/libexec/getty" "on secure".
+
+  StandardInPath/StandardOutPath/StandardErrorPath wire getty's
+  fds 0/1/2 directly to /dev/ttyu0; getty would otherwise inherit
+  launchd's fds (closed or pointed at the launchd log) and fail
+  with "no tty" before any prompt appears.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>org.freebsd.getty</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/libexec/getty</string>
+        <string>Pc</string>
+        <string>ttyu0</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardInPath</key>
+    <string>/dev/ttyu0</string>
+    <key>StandardOutPath</key>
+    <string>/dev/ttyu0</string>
+    <key>StandardErrorPath</key>
+    <string>/dev/ttyu0</string>
+</dict>
+</plist>
