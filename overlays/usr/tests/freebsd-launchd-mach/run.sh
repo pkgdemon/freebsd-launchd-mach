@@ -294,55 +294,46 @@ fi
 # ICU + libdispatch + libxpc + liblaunch, `launchctl version` prints
 # the version string. Doesn't require a running launchd (we'd need
 # launchd-as-PID-1 for that, which is a later phase).
-if [ -x /bin/launchctl ]; then
-    # launchctl-842's main() ALWAYS calls vproc_swap_integer at startup
-    # to set _launchctl_is_managed. Without launchd as PID 1,
-    # bootstrap_port is MACH_PORT_NULL and the Mach IPC call hangs in
-    # mach.ko (kernel logs "ipc_entry_lookup failed on 0" but mach_msg
-    # blocks instead of returning the SEND error -- a mach.ko issue
-    # tracked separately). So we can't currently invoke any launchctl
-    # subcommand to completion.
-    #
-    # Instead, prove the binary execs + dynamic linker resolves all
-    # shared-lib deps + reaches main(): run with a 5-second timeout.
-    # If timeout fires (rc=124), launchctl entered main() and is now
-    # waiting in mach_msg -- that's our success criterion at this
-    # phase. If launchctl exits faster than that, even better. The
-    # only failure modes we guard against are:
-    #   - binary doesn't exist
-    #   - dynamic linker error (ld-elf: undefined symbol)
-    #   - prompt timeout but ld-elf already printed an error
-    out=$(timeout 5 /bin/launchctl help 2>&1)
-    rc=$?
-    if echo "$out" | grep -q 'ld-elf\|undefined symbol'; then
-        echo "launchctl exit=$rc"
-        echo "launchctl output (first 30 lines):"
-        echo "$out" | head -30
-        echo "launchctl ldd:"
-        ldd /bin/launchctl 2>&1 || true
-        echo "---"
-        echo "LAUNCHCTL-BUILD-FAIL: dynamic linker error"
-        exit 1
-    elif [ $rc -eq 124 ]; then
-        # timeout fired -- launchctl execed and reached main(),
-        # then hung in vproc_swap_integer's Mach IPC call. Expected
-        # at this phase. Promote to OK with a note.
-        echo "LAUNCHCTL-BUILD-OK: launchctl execs + reaches main() (rc=124 -> mach.ko hang in vproc_swap_integer; tracked separately)"
-    elif [ $rc -eq 0 ]; then
-        echo "LAUNCHCTL-BUILD-OK: launchctl exited cleanly (rc=0)"
-    else
-        echo "launchctl exit=$rc"
-        echo "launchctl output (first 30 lines):"
-        echo "$out" | head -30
-        echo "launchctl ldd:"
-        ldd /bin/launchctl 2>&1 || true
-        echo "---"
-        echo "LAUNCHCTL-BUILD-FAIL: unexpected exit code"
-        exit 1
-    fi
-else
+if [ ! -x /bin/launchctl ]; then
     echo "LAUNCHCTL-BUILD-FAIL: /bin/launchctl missing"
     exit 1
 fi
+
+# Build-time verification only at this phase: binary exists, dynamic
+# linker resolves all shared-lib deps. We do NOT invoke launchctl
+# because launchctl-842's main() unconditionally calls
+# vproc_swap_integer(NULL, ...) at startup -- which hangs in mach.ko
+# without launchd-as-PID-1 (see memory: mach-msg-send-to-null-port-
+# hangs). The hang is uninterruptible from userland; even
+# `timeout 5 /bin/launchctl help` blocks the shell pipeline forever
+# because mach_msg is stuck in kernel-side wait.
+#
+# When the mach.ko ipc_kmsg path is fixed to return
+# MACH_SEND_INVALID_DEST on null-port send, switch this back to a
+# real `launchctl help` invocation.
+
+# 1. ldd: all deps must resolve via /usr/lib/libsystem (or /lib).
+launchctl_ldd=$(ldd /bin/launchctl 2>&1)
+if echo "$launchctl_ldd" | grep -qE 'not found|undefined'; then
+    echo "launchctl ldd:"
+    echo "$launchctl_ldd"
+    echo "---"
+    echo "LAUNCHCTL-BUILD-FAIL: ldd shows unresolved deps"
+    exit 1
+fi
+
+# 2. Spot-check three critical deps actually came from our libsystem
+#    layout (libCoreFoundation, lib_FoundationICU, liblaunch).
+for lib in libCoreFoundation.so lib_FoundationICU.so liblaunch.so; do
+    if ! echo "$launchctl_ldd" | grep -q "$lib.* => /usr/lib/libsystem/"; then
+        echo "launchctl ldd:"
+        echo "$launchctl_ldd"
+        echo "---"
+        echo "LAUNCHCTL-BUILD-FAIL: $lib not resolved to /usr/lib/libsystem/"
+        exit 1
+    fi
+done
+
+echo "LAUNCHCTL-BUILD-OK: /bin/launchctl exists ($(stat -f%z /bin/launchctl) bytes), all libsystem deps resolve"
 
 exit 0
