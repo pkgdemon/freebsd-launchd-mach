@@ -28,6 +28,21 @@ SRCS=		liblaunch.c \
 		libbootstrap.c \
 		launchd_helper_server_stub.c
 
+# MIG-generated user-side stubs that liblaunch's libvproc.c calls.
+# job.defs has `userprefix vproc_mig_;` -> jobUser.c provides
+# vproc_mig_swap_integer / _kickstart / _spawn2 / _legacy_ipc_request
+# / _set_security_session and the rest of the 33 vproc_mig_* family.
+# Without them in liblaunch.so, FreeBSD's rtld eagerly fails at
+# load time when launchctl (or any other consumer) dlopens
+# liblaunch.so. The launchd daemon's own link includes jobUser.c
+# too -- duplicate-symbol situations are resolved by the linker
+# preferring the executable's own .o over the shared lib's copy,
+# so launchd behavior is unchanged.
+.if !empty(MIGOUT)
+.PATH:		${MIGOUT}
+SRCS+=		jobUser.c
+.endif
+
 # MIGOUT — directory holding the mig-generated job.h / helper.h /
 # helperServer.h etc. build.sh sets this to $WORK/launchd-mig. On a
 # bare standalone build it's empty and the build will fail at the
