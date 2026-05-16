@@ -4787,13 +4787,58 @@ job_start_child(job_t j)
 	{
 		short __spflags = 0;
 		(void)posix_spawnattr_getflags(&spattr, &__spflags);
+		/* iter 16 diagnostic: prove this block is reached and report
+		 * what getflags returned. FreeBSD's posix_spawnattr_setflags
+		 * rejects flags outside POSIX_SPAWN_VALID_FLAGS (0x3F) with
+		 * EINVAL and does NOT store them, so if launchd OR'd SETEXEC
+		 * (0x40) into the flags word, setflags failed silently and
+		 * getflags returns 0 here -- this trace will show __spflags=0
+		 * in that case, telling us the bypass is needed at OR-time
+		 * not at getflags-time. */
+		{
+			char __dbg[160];
+			int __n = snprintf(__dbg, sizeof(__dbg),
+			    "iter-16: exec block reached, file2exec=%s spflags=0x%x SETEXEC=%d\n",
+			    file2exec ? file2exec : "(null)",
+			    (unsigned)(unsigned short)__spflags,
+			    (__spflags & POSIX_SPAWN_SETEXEC) ? 1 : 0);
+			if (__n > 0) {
+				ssize_t __w = write(2, __dbg, (size_t)__n);
+				(void)__w;
+			}
+		}
 		if (__spflags & POSIX_SPAWN_SETEXEC) {
 			/* execve replaces this process; only returns on
 			 * failure. errno is already set by execve. */
+			char __dbg2[80];
+			int __n2 = snprintf(__dbg2, sizeof(__dbg2),
+			    "iter-16: calling execve(%s)\n", file2exec);
+			if (__n2 > 0) { (void)write(2, __dbg2, (size_t)__n2); }
 			(void)execve(file2exec, (char *const *)argv, environ);
+			{
+				char __dbg3[80];
+				int __n3 = snprintf(__dbg3, sizeof(__dbg3),
+				    "iter-16: execve FAILED errno=%d\n", errno);
+				if (__n3 > 0) { (void)write(2, __dbg3, (size_t)__n3); }
+			}
 		} else {
-			errno = psf(NULL, file2exec, NULL, &spattr,
-			    (char *const *)argv, environ);
+			/* SETEXEC not set on spattr (either launchd didn't set
+			 * it -- unusual for job_start_child -- or FreeBSD's
+			 * setflags rejected the bit). Force-SETEXEC semantics by
+			 * calling execve directly anyway: launchd-842 invariably
+			 * wants in-place replacement here. The bypass-at-OR-time
+			 * fix can come in iter 17 once we have this confirmation. */
+			char __dbg4[80];
+			int __n4 = snprintf(__dbg4, sizeof(__dbg4),
+			    "iter-16: forcing execve(%s) (no SETEXEC bit)\n", file2exec);
+			if (__n4 > 0) { (void)write(2, __dbg4, (size_t)__n4); }
+			(void)execve(file2exec, (char *const *)argv, environ);
+			{
+				char __dbg5[80];
+				int __n5 = snprintf(__dbg5, sizeof(__dbg5),
+				    "iter-16: forced execve FAILED errno=%d\n", errno);
+				if (__n5 > 0) { (void)write(2, __dbg5, (size_t)__n5); }
+			}
 		}
 	}
 #else
