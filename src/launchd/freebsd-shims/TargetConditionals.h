@@ -8,18 +8,26 @@
  * TARGET_OS_EMBEDDED, and core.c has a few TARGET_OS_EMBEDDED gates
  * for iOS-only jetsam paths.
  *
- * For our FreeBSD port the answer is fixed: we are a desktop-class
- * Unix, not an embedded/iOS target. TARGET_OS_MAC is the closest
- * "real general-purpose OS" flag and is what the non-embedded code
- * paths key off, so we set it to 1; everything iOS / simulator /
- * Windows is 0. CPU flags follow the compiler's own predefines.
+ * For our FreeBSD port the answer is fixed: we are NOT macOS, NOT
+ * iOS, NOT a simulator. Everything Apple-platform-specific is 0.
+ *
+ * (Earlier this shim set TARGET_OS_MAC=1 / TARGET_OS_OSX=1 on the
+ * theory that launchd's "real general-purpose OS" code paths key
+ * off them. Verified 2026-05-15: launchd / liblaunch / launchctl
+ * source has ZERO uses of TARGET_OS_MAC. The 1's were dead weight
+ * for launchd but actively harmful for CF consumers -- CFBase.h
+ * conditionally includes <libkern/OSTypes.h> and <MacTypes.h>
+ * when TARGET_OS_OSX || TARGET_OS_MAC is true, and those headers
+ * don't exist on FreeBSD. Setting both to 0 lets CFBase.h fall
+ * through to its own typedef block for Boolean / UInt8 / SInt8 /
+ * etc. CPU flags follow the compiler's predefines as before.)
  */
 #ifndef _TARGETCONDITIONALS_H_SHIM_
 #define _TARGETCONDITIONALS_H_SHIM_
 
 /* --- OS family ---------------------------------------------------- */
-#define TARGET_OS_MAC			1
-#define TARGET_OS_OSX			1
+#define TARGET_OS_MAC			0
+#define TARGET_OS_OSX			0
 #define TARGET_OS_WIN32			0
 #define TARGET_OS_UNIX			1
 #define TARGET_OS_EMBEDDED		0
