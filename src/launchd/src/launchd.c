@@ -228,25 +228,7 @@ main(int argc, char *const *argv)
 		/* PID 1 doesn't have a flat namespace. */
 		launchd_flat_mach_namespace = false;
 		fflush(launchd_console);
-
-		/*
-		 * freebsd-launchd-mach (2026-05-16): scan
-		 * /System/Library/LaunchDaemons and /Library/LaunchDaemons
-		 * in-process, parse each .plist via libCoreFoundation,
-		 * convert to launch_data_t, call job_import().
-		 *
-		 * This matches Apple's actual launchd behavior -- their
-		 * launchd links CF and does the scan internally at boot.
-		 * No external bootstrap script, no fork+exec(launchctl)
-		 * hack. Without this, no LaunchDaemons load and boot
-		 * stalls at "launchd[1] has started up".
-		 *
-		 * Implementation in launchd_plist_scan.c. Links require
-		 * -lCoreFoundation -l_FoundationICU (added to launchd's
-		 * Makefile alongside the CF consumer CFLAGS:
-		 * __HAS_APPLE_ICU__, U_DISABLE_RENAMING, APPLE_ICU_CHANGES).
-		 */
-		launchd_scan_launchdaemons();
+		/* LaunchDaemons scan moved to after jobmgr_init() — see below. */
 	} else {
 		launchd_uid = getuid();
 		launchd_var_available = true;
@@ -292,6 +274,21 @@ main(int argc, char *const *argv)
 
 	monitor_networking_state();
 	jobmgr_init(sflag);
+
+	/*
+	 * freebsd-launchd-mach (2026-05-16): in-process LaunchDaemons scan.
+	 * MUST come after jobmgr_init() (which sets up root_jobmgr) and
+	 * before launchd_runtime() (which never returns). Only runs in
+	 * PID-1 mode -- per-user launchd loads its own LaunchAgents path
+	 * through a different mechanism.
+	 *
+	 * Implementation in launchd_plist_scan.c. Parses each plist via
+	 * libCoreFoundation, converts to launch_data_t, calls job_import().
+	 * Matches Apple launchd's actual boot pattern.
+	 */
+	if (pid1_magic) {
+		launchd_scan_launchdaemons();
+	}
 
 	launchd_runtime_init2();
 	launchd_runtime();
