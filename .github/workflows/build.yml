@@ -52,13 +52,18 @@ jobs:
         uses: vmactions/freebsd-vm@v1
         with:
           release: ${{ matrix.freebsd }}
-          # mem bumped from 8192 to 14336 for the swift-foundation-icu
-          # build: icu_packaged_data.cpp is a single TU that #includes
-          # 4 x 50 MB hex-encoded data chunks. clang's parser holds the
-          # full AST in memory; a 200 MB source TU peaks at 6-10 GB
-          # resident. 8 GB OOM-killed the compile (exit 137). Leaves
-          # ~2 GB for the GitHub Actions Linux host of the 16 GB runner.
-          mem: 14336
+          # mem: 8192 / cpu: 4 are pinned by the build-on-low-end-systems
+          # rule. The original swift-foundation-icu OOM was at default
+          # ninja -j$(nproc)=-j4: two concurrent compiles of the giant
+          # icu_packaged_data.cpp TU (6-10 GB peak each from its
+          # 200 MB of #include'd hex literals) blew through 8 GB. Fix
+          # is at the build-tool side: build.sh caps libicu's ninja to
+          # -j2 so only one giant TU runs at a time. If peak still
+          # exceeds 8 GB, the proper fix is the .incbin restructure
+          # (decode the hex chunks to a binary file at build time and
+          # incbin them in a tiny .S, dropping compile RAM to ~150 MB).
+          # Do NOT raise this ceiling without restructuring the cost.
+          mem: 8192
           cpu: 4
           usesh: true
           sync: rsync
