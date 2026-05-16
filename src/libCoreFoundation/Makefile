@@ -45,8 +45,14 @@ SHLIB_MAJOR=	6
 # dispatch/*), libxpc headers, and the libmach Mach surface.
 SYSROOT?=
 
-# 68 source files — full upstream minus 16 ICU files minus 2 Windows files.
-SRCS=		CFArray.c \
+# 84 source files — full upstream minus 2 Windows-only files
+# (CFWindowsUtilities, CFTimeZone_WindowsMapping). The 16 ICU-using
+# files dropped during the Option A pre-pivot are restored now that
+# libicu (apple/swift-foundation-icu) is built and -l_FoundationICU
+# is on LDADD. See pkgdemon.github.io/freebsd-libicu-port-plan.html
+# §10 for the rationale.
+SRCS=		CFApplicationPreferences.c \
+		CFArray.c \
 		CFAttributedString.c \
 		CFBag.c \
 		CFBase.c \
@@ -70,22 +76,35 @@ SRCS=		CFArray.c \
 		CFBundle_Tables.c \
 		CFBundle.c \
 		CFBurstTrie.c \
+		CFCalendar_Enumerate.c \
+		CFCalendar.c \
+		CFCharacterSet.c \
 		CFConcreteStreams.c \
 		CFData.c \
 		CFDate.c \
 		CFDateComponents.c \
+		CFDateFormatter.c \
 		CFDateInterval.c \
+		CFDateIntervalFormatter.c \
 		CFDictionary.c \
 		CFError.c \
 		CFFileUtilities.c \
+		CFICUConverters.c \
 		CFKnownLocations.c \
+		CFListFormatter.c \
+		CFLocale.c \
+		CFLocaleIdentifier.c \
+		CFLocaleKeys.c \
 		CFNumber.c \
+		CFNumberFormatter.c \
 		CFOldStylePList.c \
 		CFPlatform.c \
 		CFPlatformConverters.c \
 		CFPlugIn.c \
 		CFPreferences.c \
 		CFPropertyList.c \
+		CFRegularExpression.c \
+		CFRelativeDateTimeFormatter.c \
 		CFRunArray.c \
 		CFRunLoop.c \
 		CFRuntime.c \
@@ -97,8 +116,10 @@ SRCS=		CFArray.c \
 		CFStream.c \
 		CFString.c \
 		CFStringEncodingConverter.c \
+		CFStringEncodingDatabase.c \
 		CFStringEncodings.c \
 		CFStringScanner.c \
+		CFStringTransform.c \
 		CFStringUtilities.c \
 		CFSystemDirectories.c \
 		CFTimeZone.c \
@@ -143,10 +164,19 @@ CFLAGS+=	-DCF_BUILDING_CF=1
 CFLAGS+=	-DDEPLOYMENT_TARGET_FREEBSD=1
 CFLAGS+=	-D__HAS_DISPATCH__=1
 CFLAGS+=	-D_GNU_SOURCE=1
+# __HAS_APPLE_ICU__=1: enables CF's Apple-ICU-only code paths
+# (e.g. ualoc_localizationsToUse in CFBundle_Locale.c, the
+# UADATPG_FORCE_*_HOUR_CYCLE constants in CFDateFormatter.c).
+# Apple-private symbols ship in our vendored swift-foundation-icu.
+CFLAGS+=	-D__HAS_APPLE_ICU__=1
 CFLAGS+=	-fblocks
 CFLAGS+=	-fconstant-cfstrings
 
-LDADD+=		-ldispatch -lBlocksRuntime -lpthread
+# -l_FoundationICU: the swift-foundation-icu CMake target produces
+# lib_FoundationICU.so (unified Apple-libicucore-shape library).
+# build.sh creates a libicucore.so symlink for Apple-canonical
+# naming; either link line resolves the same body of code.
+LDADD+=		-ldispatch -lBlocksRuntime -lpthread -l_FoundationICU
 
 LIBDIR=		${PREFIX}/lib/libsystem
 
