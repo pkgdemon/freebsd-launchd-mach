@@ -787,6 +787,10 @@ echo "==> libicu install verified"
 #     /usr/include/CoreFoundation/.
 #
 echo "==> building libCoreFoundation (src/libCoreFoundation)"
+# bsd.lib.mk's INCS install rule uses install(1) directly without an
+# auto-mkdir of INCSDIR. Pre-create /usr/include/CoreFoundation/ in
+# the rootfs so the install step succeeds.
+mkdir -p "$WORK/rootfs/usr/include/CoreFoundation"
 make -C "$ROOT/src/libCoreFoundation" \
     DESTDIR="$WORK/rootfs" \
     PREFIX=/usr \
