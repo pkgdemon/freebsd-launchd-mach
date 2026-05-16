@@ -7,8 +7,23 @@
 	See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
 */
 
+/*
+ * freebsd-launchd-mach patch (2026-05-15): default to 0, was 1.
+ * Upstream's default of 1 means every CF consumer (launchctl,
+ * test_corefoundation, configd, etc.) that doesn't explicitly
+ * define DEPLOYMENT_RUNTIME_SWIFT activates the Swift codepath
+ * in CFSTR()/CONST_STRING_DECL, referencing
+ * $s10Foundation19_NSCFConstantStringCN -- a Swift type-metadata
+ * symbol that doesn't exist in our pure-C launchd stack.
+ *
+ * The libCoreFoundation build itself compiles with the prefix
+ * header forcing this to 0; consumers don't see the prefix and
+ * pick up the upstream default. Flipping it here makes the
+ * non-Swift path the default for everyone, which matches our
+ * "system services free of the ObjC/Swift runtime" posture.
+ */
 #ifndef DEPLOYMENT_RUNTIME_SWIFT
-#define DEPLOYMENT_RUNTIME_SWIFT 1
+#define DEPLOYMENT_RUNTIME_SWIFT 0
 #endif
 
 #if !defined(__COREFOUNDATION_CFAVAILABILITY__)
