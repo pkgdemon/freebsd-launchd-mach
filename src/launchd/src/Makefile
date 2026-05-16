@@ -84,6 +84,12 @@ CFLAGS+=	-I${MIGOUT}			# job.h, jobServer.h, mach_excServer.h, ...
 CFLAGS+=	-I${SYSROOT}/usr/include	# uuid/, dispatch/, xpc/, servers/
 LDADD+=		-L${SYSROOT}/usr/lib/libsystem
 LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
+# libCoreFoundation.so has internal hidden-visibility references
+# (_CFThreadSetName, _CFGetCurrentDirectory, ...) that FreeBSD's
+# bsd.prog.mk strict --no-allow-shlib-undefined catches at link.
+# Same situation as launchctl's Makefile (memory: linker policy
+# difference, not a launchd bug). Match the policy.
+LDFLAGS+=	-Wl,--allow-shlib-undefined
 .endif
 
 # launchd-842 expects these Apple build-time defines.
@@ -105,7 +111,8 @@ CFLAGS+=	-DAPPLE_ICU_CHANGES=1
 
 LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel \
 		-lCoreFoundation -l_FoundationICU \
-		-lpthread -lutil -lBlocksRuntime
+		-lpthread -lutil -lBlocksRuntime \
+		-lm		# floor/fmod/scalbn/ceil pulled in by CF
 
 BINDIR=		/sbin
 
