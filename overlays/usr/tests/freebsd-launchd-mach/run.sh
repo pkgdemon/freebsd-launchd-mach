@@ -289,4 +289,25 @@ else
     exit 1
 fi
 
+# 9. launchctl — Apple's launchd control utility, ported. Build-only
+# smoke at this phase: the binary execs, dynamic linker resolves CF +
+# ICU + libdispatch + libxpc + liblaunch, `launchctl version` prints
+# the version string. Doesn't require a running launchd (we'd need
+# launchd-as-PID-1 for that, which is a later phase).
+if [ -x /bin/launchctl ]; then
+    out=$(/bin/launchctl version 2>&1)
+    rc=$?
+    if [ $rc -eq 0 ]; then
+        echo "LAUNCHCTL-BUILD-OK: $out"
+    else
+        echo "LAUNCHCTL-BUILD-FAIL: launchctl version exit=$rc"
+        echo "output: $out"
+        ldd /bin/launchctl 2>&1 || true
+        exit 1
+    fi
+else
+    echo "LAUNCHCTL-BUILD-FAIL: /bin/launchctl missing"
+    exit 1
+fi
+
 exit 0

@@ -284,6 +284,17 @@ expect {
     }
     "COREFOUNDATION-OK" { puts "\nOK: libCoreFoundation CFDictionary + plist round-trip works" }
 }
+expect {
+    timeout {
+        puts "\nFAIL: LAUNCHCTL-BUILD marker not seen"
+        exit 1
+    }
+    "LAUNCHCTL-BUILD-FAIL" {
+        puts "\nFAIL: /bin/launchctl version failed to exec / link"
+        exit 1
+    }
+    "LAUNCHCTL-BUILD-OK" { puts "\nOK: /bin/launchctl execs + prints version" }
+}
 
 # Stage 4: clean halt so qemu exits 0 (the -no-reboot flag turns
 # halt -p into a clean shutdown rather than a reset loop).

@@ -827,6 +827,43 @@ chroot "$WORK/rootfs" ldd /usr/tests/freebsd-launchd-mach/test_corefoundation \
 echo "==> test_corefoundation built + ldd verified"
 
 #
+# 3q. build launchctl (src/launchd/support/launchctl.c).
+#     The user-side control utility for launchd. 4549 LOC of
+#     CF-heavy code; depends on liblaunch + libCoreFoundation +
+#     lib_FoundationICU + libxpc + libdispatch + libsystem_kernel.
+#
+#     Uses three new shims under src/launchd/freebsd-shims/:
+#       IOKit/IOKitLib.h        — stubs IOKitWaitQuiet,
+#                                 IORegistryEntryFromPath, etc.
+#                                 (4 vestigial sites; would be
+#                                 no-ops on FreeBSD even with
+#                                 real IOKit — they query Apple-
+#                                 specific IODeviceTree paths)
+#       NSSystemDirectories.h   — enumerates /Local/Library and
+#                                 /System/Library for LaunchAgents
+#                                 / LaunchDaemons scan
+#       mach-o/getsect.h        — stubs getsectiondata() to NULL
+#                                 so the embedded XPC cache lookup
+#                                 falls through to live-disk scan
+#
+#     Install: /bin/launchctl, matching Apple's shipping path.
+#
+echo "==> building launchctl (src/launchd/support)"
+mkdir -p "$WORK/rootfs/bin"
+make -C "$ROOT/src/launchd/support" \
+    DESTDIR="$WORK/rootfs" \
+    SYSROOT="$WORK/rootfs" \
+    all install
+ls -lh "$WORK/rootfs/bin/launchctl"
+chroot "$WORK/rootfs" ldd /bin/launchctl \
+    | grep -q "libCoreFoundation.so.* => /usr/lib/libsystem/" \
+    || { echo "FAIL: ldd doesn't resolve launchctl to /usr/lib/libsystem/libCoreFoundation.so"; exit 1; }
+chroot "$WORK/rootfs" ldd /bin/launchctl \
+    | grep -q "lib_FoundationICU.so" \
+    || { echo "FAIL: ldd doesn't resolve launchctl to lib_FoundationICU.so"; exit 1; }
+echo "==> launchctl built + ldd verified"
+
+#
 # 3z. purge build packages + clean pkg cache + tear down chroot.
 #     Runs LAST in the build phase, after every chroot-side build
 #     (libdispatch) has used cmake/ninja/clang. Build pkgs (cmake/ninja
