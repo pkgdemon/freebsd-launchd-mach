@@ -285,7 +285,21 @@ add_custom_command(
     COMMENT "Decoding ICU hex chunks to binary blob (replaces icu_packaged_data.cpp)"
     VERBATIM)
 
-# Step 3: substitute the .bin path into the .S template
+# Step 3: substitute the .bin path AND the version-suffixed data
+# symbol name into the .S template. U_ICUDATA_ENTRY_POINT is a
+# preprocessor macro that expands to icudt<MAJOR>_dat. We extract
+# U_ICU_VERSION_MAJOR_NUM from uvernum.h so the symbol stays in
+# sync with the vendored ICU version after upgrades.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../include/_foundation_unicode/uvernum.h"
+    _freebsd_uvernum_content)
+string(REGEX MATCH "#define[ \t]+U_ICU_VERSION_MAJOR_NUM[ \t]+([0-9]+)"
+    _freebsd_uvernum_match "${_freebsd_uvernum_content}")
+if(NOT CMAKE_MATCH_1)
+    message(FATAL_ERROR "freebsd-launchd-mach: failed to extract U_ICU_VERSION_MAJOR_NUM from uvernum.h")
+endif()
+set(ICU_DATA_SYMBOL "icudt${CMAKE_MATCH_1}_dat")
+message(STATUS "freebsd-launchd-mach: ICU data symbol = ${ICU_DATA_SYMBOL}")
+
 set(ICU_PACKAGED_BIN_PATH "${_freebsd_icu_packaged_bin}")
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/freebsd_icu_packaged_data.S.in"
