@@ -46,7 +46,8 @@ SRCS=		launchd.c \
 		log.c \
 		kill2.c \
 		ktrace.c \
-		forward_stubs.c
+		forward_stubs.c \
+		launchd_plist_scan.c
 
 # MIG-generated stubs. launchd is both client and server for the
 # job / internal / helper subsystems, server-only for mach_exc and
@@ -88,8 +89,23 @@ LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
 # launchd-842 expects these Apple build-time defines.
 CFLAGS+=	-D__APPLE_API_PRIVATE -DPRIVATE=1
 CFLAGS+=	-fblocks			# libdispatch block syntax
+CFLAGS+=	-fconstant-cfstrings		# CFSTR() literal -> CFStringRef (launchd_plist_scan.c)
 
-LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel -lpthread -lutil -lBlocksRuntime
+# CF + ICU consumer flags — required for launchd_plist_scan.c which
+# links libCoreFoundation + lib_FoundationICU to parse LaunchDaemons
+# plists at PID-1 startup. MUST match libicu's compile env per
+# memory icu-complete-corefoundation-ok (otherwise rtld eagerly
+# fails at first dlopen on swift_-prefixed ICU symbols):
+#   __HAS_APPLE_ICU__=1   activate CF's Apple-private ICU code paths
+#   U_DISABLE_RENAMING=1  match libicu's symbol export scheme
+#   APPLE_ICU_CHANGES=1   expose Apple-private ICU function decls
+CFLAGS+=	-D__HAS_APPLE_ICU__=1
+CFLAGS+=	-DU_DISABLE_RENAMING=1
+CFLAGS+=	-DAPPLE_ICU_CHANGES=1
+
+LDADD+=		-llaunch -lxpc -ldispatch -lsystem_kernel \
+		-lCoreFoundation -l_FoundationICU \
+		-lpthread -lutil -lBlocksRuntime
 
 BINDIR=		/sbin
 

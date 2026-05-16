@@ -81,6 +81,7 @@
 #include "runtime.h"
 #include "core.h"
 #include "ipc.h"
+#include "launchd_plist_scan.h"
 
 #define LAUNCHD_CONF ".launchd.conf"
 
@@ -229,39 +230,23 @@ main(int argc, char *const *argv)
 		fflush(launchd_console);
 
 		/*
-		 * freebsd-launchd-mach (2026-05-16): fork a bootstrap helper
-		 * that loads /System/Library/LaunchDaemons.
+		 * freebsd-launchd-mach (2026-05-16): scan
+		 * /System/Library/LaunchDaemons and /Library/LaunchDaemons
+		 * in-process, parse each .plist via libCoreFoundation,
+		 * convert to launch_data_t, call job_import().
 		 *
-		 * On macOS this is done by an external script (or sysinit
-		 * LaunchDaemon registered via a hardcoded path). We don't
-		 * have that infrastructure -- and launchd-842 doesn't scan
-		 * LaunchDaemons itself; plist loading is launchctl-driven
-		 * via job_import() over the bootstrap IPC.
+		 * This matches Apple's actual launchd behavior -- their
+		 * launchd links CF and does the scan internally at boot.
+		 * No external bootstrap script, no fork+exec(launchctl)
+		 * hack. Without this, no LaunchDaemons load and boot
+		 * stalls at "launchd[1] has started up".
 		 *
-		 * So: at PID-1 startup, fork. Child sleeps briefly to let
-		 * the main launchd finish settling on the Mach event loop,
-		 * then exec's `launchctl bootstrap -S System` -- the same
-		 * command macOS uses to bring up system daemons.
-		 *
-		 * The child inherits bootstrap_port from the parent
-		 * launchd (set up by launchd_runtime_init above); launchctl
-		 * uses that to RPC the plist imports back to launchd.
-		 * Without this, getty (and any other LaunchDaemon) never
-		 * starts and the boot stalls at the "launchd[1] has
-		 * started up" message.
+		 * Implementation in launchd_plist_scan.c. Links require
+		 * -lCoreFoundation -l_FoundationICU (added to launchd's
+		 * Makefile alongside the CF consumer CFLAGS:
+		 * __HAS_APPLE_ICU__, U_DISABLE_RENAMING, APPLE_ICU_CHANGES).
 		 */
-		pid_t bootstrap_pid = fork();
-		if (bootstrap_pid == 0) {
-			/* child */
-			sleep(2);
-			execl("/bin/launchctl", "launchctl",
-			    "bootstrap", "-S", "System", NULL);
-			_exit(127);
-		} else if (bootstrap_pid > 0) {
-			launchd_syslog(LOG_NOTICE | LOG_CONSOLE,
-			    "*** Spawned bootstrap helper pid=%d (launchctl bootstrap -S System). ***",
-			    bootstrap_pid);
-		}
+		launchd_scan_launchdaemons();
 	} else {
 		launchd_uid = getuid();
 		launchd_var_available = true;
