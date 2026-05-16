@@ -735,7 +735,10 @@ cmake -G Ninja /tmp/swift-foundation-icu \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_BUILD_TYPE=Release
-ninja
+# -j2 cap: icu_packaged_data.cpp peaks at 6-10 GB resident (200 MB
+# of #include'd hex literals -> giant AST). Two parallel compiles
+# at peak fit in 14 GB; -j4 OOM-killed in CI. Slow but reliable.
+ninja -j 2
 ninja install
 CHROOT_ICU
 
