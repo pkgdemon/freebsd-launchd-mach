@@ -169,6 +169,19 @@ CFLAGS+=	-D_GNU_SOURCE=1
 # UADATPG_FORCE_*_HOUR_CYCLE constants in CFDateFormatter.c).
 # Apple-private symbols ship in our vendored swift-foundation-icu.
 CFLAGS+=	-D__HAS_APPLE_ICU__=1
+# U_DISABLE_RENAMING=1 + APPLE_ICU_CHANGES=1: must match the
+# defines libicu was compiled with. swift-foundation-icu's
+# urename.h gates Apple-private symbol renames on
+# `#if APPLE_ICU_CHANGES && !U_DISABLE_RENAMING` -- without
+# U_DISABLE_RENAMING, urename.h activates renames like
+# UCNV_FROM_U_CALLBACK_STOP -> swift_UCNV_FROM_U_CALLBACK_STOP.
+# But libicu was built with U_DISABLE_RENAMING=1 so it exports
+# the un-renamed name. Mismatch -> "undefined symbol
+# swift_UCNV_FROM_U_CALLBACK_STOP" at runtime ld-elf.so.1.
+# APPLE_ICU_CHANGES=1 is also needed to expose Apple-private
+# function decls in the libicu headers (e.g. ualoc_*).
+CFLAGS+=	-DU_DISABLE_RENAMING=1
+CFLAGS+=	-DAPPLE_ICU_CHANGES=1
 CFLAGS+=	-fblocks
 CFLAGS+=	-fconstant-cfstrings
 
