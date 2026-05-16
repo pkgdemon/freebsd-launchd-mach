@@ -300,9 +300,16 @@ if [ -x /bin/launchctl ]; then
     if [ $rc -eq 0 ]; then
         echo "LAUNCHCTL-BUILD-OK: $out"
     else
-        echo "LAUNCHCTL-BUILD-FAIL: launchctl version exit=$rc"
-        echo "output: $out"
+        # Print diagnostic FIRST so it drains to the serial console
+        # BEFORE the marker triggers boot-test.sh's expect block to
+        # exit and kill qemu (otherwise the diagnostic is lost).
+        echo "launchctl version exit=$rc"
+        echo "launchctl output: $out"
+        echo "launchctl ldd:"
         ldd /bin/launchctl 2>&1 || true
+        echo "---"
+        # Marker last — expect closes qemu on first match.
+        echo "LAUNCHCTL-BUILD-FAIL: see prior 'launchctl ...' lines"
         exit 1
     fi
 else
