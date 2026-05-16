@@ -25,7 +25,8 @@ SHLIB_MAJOR=	1
 
 SRCS=		liblaunch.c \
 		libvproc.c \
-		libbootstrap.c
+		libbootstrap.c \
+		launchd_helper_server_stub.c
 
 # MIGOUT — directory holding the mig-generated job.h / helper.h /
 # helperServer.h etc. build.sh sets this to $WORK/launchd-mig. On a
