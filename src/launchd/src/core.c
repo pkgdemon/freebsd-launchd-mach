@@ -4752,93 +4752,31 @@ job_start_child(job_t j)
 
 #ifdef __FreeBSD__
 	/*
-	 * freebsd-launchd-mach iter 15 (2026-05-16): emulate Apple's
-	 * POSIX_SPAWN_SETEXEC on FreeBSD.
+	 * freebsd-launchd-mach: emulate Apple's POSIX_SPAWN_SETEXEC.
 	 *
-	 * Apple semantic of POSIX_SPAWN_SETEXEC: do not fork; replace
-	 * the calling process with the new program. launchd ALWAYS
-	 * sets this flag (spflags initializer at line 4562 above) and
-	 * runs posix_spawn from the already-forked runtime_fork child,
-	 * so the child becomes the job's program in-place and launchd's
-	 * EVFILT_PROC watch on that PID tracks the job.
+	 * Apple semantic: do not fork; replace the calling process with
+	 * the new program. launchd-842's job_start_child always sets this
+	 * flag (spflags initializer at line 4562) and calls posix_spawn
+	 * from the runtime_fork child, so the child becomes the job's
+	 * program in-place and launchd's EVFILT_PROC watch on that PID
+	 * tracks the right process.
 	 *
-	 * FreeBSD's libc posix_spawn has no SETEXEC equivalent. The
-	 * SETEXEC bit (0x40, defined in our shim spawn.h) is outside
-	 * FreeBSD's POSIX_SPAWN_VALID_FLAGS=0x3F so the bare psf call
-	 * either rejects with EINVAL or silently fork+execs into a
-	 * grandchild -- both break launchd's process tracking and
-	 * neither delivers the new program in-place. PID-1 boot symptom
-	 * before this fix: one runtime.c:719 child-sysctlbyname trace
-	 * (fork happened), then 8 minutes of silence (exec failed).
-	 *
-	 * The earlier macro-wrapper approach (shim's spawn.h "#define
-	 * posix_spawn freebsd_shim_posix_spawn" + static-inline)
-	 * compiled clean but the wrapper was never actually reached --
-	 * suspected interaction with core.c's "#include <spawn.h>" at
-	 * line 83 redeclaring the symbol after our macros are defined.
-	 * Direct patch here is unambiguous: no macro substitution, no
-	 * include-order dependency, evaluated at the exact call site.
-	 *
-	 * Non-SETEXEC path is preserved as fallback. psf may be the
-	 * shimmed wrapper or libc's real posix_spawn -- doesn't matter
-	 * here because SETEXEC is the only case where the difference
-	 * matters and we've already handled it.
+	 * FreeBSD's libc posix_spawn has no SETEXEC equivalent. Without
+	 * an in-place replacement, libc posix_spawn would fork *again*
+	 * (creating a grandchild) and the runtime_fork child would then
+	 * _exit -- breaking launchd's process tracking and losing the
+	 * grandchild's tty I/O. Read the SETEXEC bit off the attr and
+	 * dispatch to execve directly to get the right semantics; fall
+	 * back to libc posix_spawn for the (rare) non-SETEXEC path.
 	 */
 	{
 		short __spflags = 0;
 		(void)posix_spawnattr_getflags(&spattr, &__spflags);
-		/* iter 16 diagnostic: prove this block is reached and report
-		 * what getflags returned. FreeBSD's posix_spawnattr_setflags
-		 * rejects flags outside POSIX_SPAWN_VALID_FLAGS (0x3F) with
-		 * EINVAL and does NOT store them, so if launchd OR'd SETEXEC
-		 * (0x40) into the flags word, setflags failed silently and
-		 * getflags returns 0 here -- this trace will show __spflags=0
-		 * in that case, telling us the bypass is needed at OR-time
-		 * not at getflags-time. */
-		{
-			char __dbg[160];
-			int __n = snprintf(__dbg, sizeof(__dbg),
-			    "iter-16: exec block reached, file2exec=%s spflags=0x%x SETEXEC=%d\n",
-			    file2exec ? file2exec : "(null)",
-			    (unsigned)(unsigned short)__spflags,
-			    (__spflags & POSIX_SPAWN_SETEXEC) ? 1 : 0);
-			if (__n > 0) {
-				ssize_t __w = write(2, __dbg, (size_t)__n);
-				(void)__w;
-			}
-		}
 		if (__spflags & POSIX_SPAWN_SETEXEC) {
-			/* execve replaces this process; only returns on
-			 * failure. errno is already set by execve. */
-			char __dbg2[80];
-			int __n2 = snprintf(__dbg2, sizeof(__dbg2),
-			    "iter-16: calling execve(%s)\n", file2exec);
-			if (__n2 > 0) { (void)write(2, __dbg2, (size_t)__n2); }
 			(void)execve(file2exec, (char *const *)argv, environ);
-			{
-				char __dbg3[80];
-				int __n3 = snprintf(__dbg3, sizeof(__dbg3),
-				    "iter-16: execve FAILED errno=%d\n", errno);
-				if (__n3 > 0) { (void)write(2, __dbg3, (size_t)__n3); }
-			}
 		} else {
-			/* SETEXEC not set on spattr (either launchd didn't set
-			 * it -- unusual for job_start_child -- or FreeBSD's
-			 * setflags rejected the bit). Force-SETEXEC semantics by
-			 * calling execve directly anyway: launchd-842 invariably
-			 * wants in-place replacement here. The bypass-at-OR-time
-			 * fix can come in iter 17 once we have this confirmation. */
-			char __dbg4[80];
-			int __n4 = snprintf(__dbg4, sizeof(__dbg4),
-			    "iter-16: forcing execve(%s) (no SETEXEC bit)\n", file2exec);
-			if (__n4 > 0) { (void)write(2, __dbg4, (size_t)__n4); }
-			(void)execve(file2exec, (char *const *)argv, environ);
-			{
-				char __dbg5[80];
-				int __n5 = snprintf(__dbg5, sizeof(__dbg5),
-				    "iter-16: forced execve FAILED errno=%d\n", errno);
-				if (__n5 > 0) { (void)write(2, __dbg5, (size_t)__n5); }
-			}
+			errno = psf(NULL, file2exec, NULL, &spattr,
+			    (char *const *)argv, environ);
 		}
 	}
 #else
