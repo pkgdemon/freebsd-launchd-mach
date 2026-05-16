@@ -196,7 +196,24 @@ launchd_load_one_plist(const char *path)
 		return false;
 	}
 
-	launchd_syslog(LOG_NOTICE, "plist scan: loaded %s", path);
+	launchd_syslog(LOG_NOTICE | LOG_CONSOLE,
+	    "plist scan: loaded %s -> job_t %p", path, (void *)j);
+
+	/*
+	 * job_import -> jobmgr_import2 already calls job_dispatch(j, false)
+	 * at the end, which evaluates keepalive (RunAtLoad sets start_pending,
+	 * so keepalive returns true for RunAtLoad=true). Belt-and-suspenders:
+	 * re-dispatch with kickstart=true and log the visible outcome so that
+	 * PID-1 boot makes the start-attempt observable without raising the
+	 * global syslog mask to DEBUG. struct job_s is opaque outside core.c
+	 * so we can only check NULL/non-NULL here -- if "NULL" then the job
+	 * was useless/removed; if "ok" the dispatch path was taken (which
+	 * either kicked off, found already-active, or watched for keepalive).
+	 */
+	job_t r = job_dispatch(j, true);
+	launchd_syslog(LOG_NOTICE | LOG_CONSOLE,
+	    "plist scan: dispatch %s -> %s",
+	    path, (r != NULL) ? "ok" : "NULL");
 	return true;
 }
 

@@ -288,6 +288,8 @@ main(int argc, char *const *argv)
 	 */
 	if (pid1_magic) {
 		launchd_scan_launchdaemons();
+		launchd_syslog(LOG_NOTICE | LOG_CONSOLE,
+		    "post-scan: entering launchd_runtime() event loop");
 	}
 
 	launchd_runtime_init2();
