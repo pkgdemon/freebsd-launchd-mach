@@ -44,6 +44,12 @@ LDFLAGS+=	-Wl,-rpath,/usr/lib/libsystem
 
 # launchd-842 expects these Apple build-time defines.
 CFLAGS+=	-D__APPLE_API_PRIVATE -DPRIVATE=1
+
+# Force-include FreeBSD compat shim that defines macOS-only
+# identifiers launchctl.c references (_PATH_UTMPX, KERN_SAFEBOOT/
+# NETBOOT/OSVERSION, SO_EXECPATH). Each define is documented in
+# the header. Avoids in-source #ifdef sprinkles.
+CFLAGS+=	-include ${.CURDIR}/../freebsd-shims/launchctl_freebsd_compat.h
 # CF + ICU consumer flags. MUST match what libicu and libCoreFoundation
 # were built with — see icu_complete_corefoundation_ok memory entry:
 #   __HAS_APPLE_ICU__=1   activate Apple-private ICU code paths
