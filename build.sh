@@ -808,7 +808,11 @@ echo "==> libCoreFoundation built + installed"
 #     refcount path is alive and the plist driver works.
 #
 echo "==> building test_corefoundation"
-cc -I"$WORK/rootfs/usr/include" \
+# -fblocks: CF public headers (CFCalendarPriv.h, ForSwiftFoundationOnly.h)
+# use ^block syntax in their function decls; clang errors out without
+# -fblocks even when the consumer doesn't use blocks itself.
+cc -fblocks \
+   -I"$WORK/rootfs/usr/include" \
    -L"$WORK/rootfs/usr/lib/libsystem" \
    -Wl,-rpath,/usr/lib/libsystem \
    -o "$WORK/rootfs/usr/tests/freebsd-launchd-mach/test_corefoundation" \
