@@ -32,6 +32,7 @@
  *   fails and the function bails. Inline static so each TU that
  *   includes this header gets a private definition; no link conflict.
  */
+#include <stddef.h>		/* NULL */
 #include <mach/mach_types.h>
 #include <mach/kern_return.h>
 static inline kern_return_t
