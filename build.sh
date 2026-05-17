@@ -895,6 +895,54 @@ test -x "$WORK/rootfs/usr/sbin/hwregd" \
 echo "==> HWREGD-BUILD-OK"
 
 #
+# 3s. Phase J1 iter 1 — generate libnotify MIG stubs + build libnotify.
+#     Apple's libnotify client library (src/Libnotify/). Vendored at
+#     Phase J0 (commit 455a727). This step:
+#       (a) runs migcom on notify_ipc.defs + notify_old_ipc.defs to
+#           produce notify_ipc{User,Server}.c/.h
+#       (b) builds libnotify.so against those stubs + freebsd-shims
+#       (c) installs to /usr/lib/system/libnotify.so + sonname link
+#     notifyd daemon is J2; this is client-library-only.
+#     Plan: pkgdemon.github.io/freebsd-asl-plan.html
+#
+echo "==> Phase J1: generating libnotify MIG stubs"
+LIBNOTIFY_MIG_OUT="$WORK/libnotify-mig"
+mkdir -p "$LIBNOTIFY_MIG_OUT"
+LIBNOTIFY_MIG_INCS="-I$ROOT/src/libmach/include -I$ROOT/src/Libnotify"
+for d in notify_ipc notify_old_ipc; do
+    defs="$ROOT/src/Libnotify/${d}.defs"
+    echo "  mig: ${d}.defs"
+    ( cd "$LIBNOTIFY_MIG_OUT" && \
+      MIGCC=/usr/bin/cc MIGCOM="$WORK/rootfs/usr/libexec/migcom" \
+      /bin/sh "$ROOT/src/bootstrap_cmds/migcom.tproj/mig.sh" \
+        $LIBNOTIFY_MIG_INCS \
+        -header "${d}.h" -user "${d}User.c" \
+        -server "${d}Server.c" -sheader "${d}Server.h" \
+        "$defs" ) \
+      || { echo "FAIL: mig could not process ${d}.defs"; exit 1; }
+done
+for f in notify_ipc.h notify_ipcUser.c; do
+    test -s "$LIBNOTIFY_MIG_OUT/$f" \
+        || { echo "FAIL: mig produced no $f from notify_ipc.defs"; exit 1; }
+done
+echo "==> Phase J1: libnotify MIG stubs generated"
+ls -la "$LIBNOTIFY_MIG_OUT"
+
+echo "==> Phase J1: building libnotify (src/Libnotify)"
+mkdir -p "$WORK/rootfs/usr/lib/system"
+make -C "$ROOT/src/Libnotify" \
+    DESTDIR="$WORK/rootfs" \
+    SYSROOT="$WORK/rootfs" \
+    MIGOUT="$LIBNOTIFY_MIG_OUT" \
+    all install
+ls -lh "$WORK/rootfs/usr/lib/system/libnotify.so"* 2>/dev/null
+test -f "$WORK/rootfs/usr/lib/system/libnotify.so.1" \
+    || { echo "FAIL: libnotify.so.1 not installed"; exit 1; }
+test -L "$WORK/rootfs/usr/lib/system/libnotify.so" \
+    || { echo "FAIL: libnotify.so symlink not installed"; exit 1; }
+echo "==> NOTIFY-LIB-OK"
+
+#
 # 3z. purge build packages + clean pkg cache + tear down chroot.
 #     Runs LAST in the build phase, after every chroot-side build
 #     (libdispatch) has used cmake/ninja/clang. Build pkgs (cmake/ninja
